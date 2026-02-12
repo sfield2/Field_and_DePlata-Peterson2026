@@ -1,0 +1,110 @@
+---
+title: "Field and DePlata-Peterson 2026"
+format: html
+editor: visual
+---
+
+# Research compendium for Field and Dean (2026)
+
+This R-based research compendium supports the...
+
+View the raw source code and output at: provide link
+
+**When using the code included in this research compendium, please cite *all* of the following:**
+
+> Field, S and M. DePlata-Peterson. 2026. *Article Name*. Journal Location, In review.
+>
+> Field, S and M. DePlata-Peterson. 2026. *Article Name*, Version 1.0.0. Zenodo. \[DOI\]
+
+## Step 1: Set Up Environment
+
+```{r}
+#| echo: false
+packages <-c('terra','sf','ggplot2','tidyterra','dplyr','tidyr','gifski','gganimate')
+
+for(p in packages) if(p %in% rownames(installed.packages()) == F) { install.packages(p) }
+for(p in packages) suppressPackageStartupMessages(library(p,quietly=T,character.only=T))
+
+theme_set(theme_bw())
+```
+
+```{r}
+#| echo: false
+setwd("C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/PROJECT/CLIMATE_VARIABILITY_REDUX")
+```
+
+## Step 2: Study Area and Paleoclimate Raster
+
+Study area derived as extent of sites used in study.
+
+Variability raster downloaded from....
+
+```{r}
+#| echo: false
+study_extent <- st_read("./DATA/study_extent.shp")%>%
+  st_transform(.,crs=4269)
+
+r <- terra::rast("./DATA/CLIMATE/PPT.tif")
+
+# calculate year-to-year variability and export
+r_var <- (subset(r, 1:(nlyr(r)-1)) - subset(r, 2:nlyr(r))) * -1
+
+writeRaster(r_var,"./DATA/CLIMATE/PPT_annualvariability.tif")
+```
+
+After variability assessment is computed/exported, read in directly.
+
+```{r}
+#| echo: false
+r_var <- terra::rast("./DATA/CLIMATE/PPT_annualvariability.tif")
+```
+
+### Plotting Variability Raster
+
+```{r}
+#| echo: false
+
+r_var1 <- r_var[[600:1300]]
+
+df <- as.data.frame(r_var1,xy=T)%>%
+  pivot_longer(cols = -c(x, y), names_to = "layer",values_to = "value")%>%
+  mutate(layer_num = as.numeric(gsub("PPT_", "", layer)))
+
+p <- ggplot(df, aes(x = x, y = y, fill = value)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#FEFAE040","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
+name = "Precipitation 
+Variability (mm)")+
+  #coord_equal() +
+  labs(title = "Year (CE): {frame_time}",
+       x=NULL,
+       y=NULL) +
+  transition_time(layer_num) +
+  ease_aes("linear")+
+  theme_minimal()
+
+animate(p, fps = 1,nframes = 7, width = 750, height = 600)
+
+anim_save("./FIGURES/raster_precip_variability_600to1300.gif")
+
+```
+
+## Step 3: Chaco Great Houses
+
+Accessed from:
+
+```{r}
+#| echo: false
+# example script
+
+```
+
+## Step 4: VEP II North Study Area Site Data
+
+Accessed from:
+
+```{r}
+#| echo: false
+# example script
+
+```
