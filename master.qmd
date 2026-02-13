@@ -25,7 +25,7 @@ knitr::opts_knit$set(root.dir = "C:/Users/sfield3/OneDrive - University of Wyomi
 
 ```{r}
 #| echo: false
-packages <-c('terra','sf','ggplot2','tidyterra','dplyr','tidyr','gifski','gganimate')
+packages <-c('terra','sf','ggplot2','tidyterra','dplyr','tidyr','gifski','gganimate','ggforce')
 
 for(p in packages) if(p %in% rownames(installed.packages()) == F) { install.packages(p) }
 for(p in packages) suppressPackageStartupMessages(library(p,quietly=T,character.only=T))
@@ -274,45 +274,18 @@ Results showing that std and change better predictors than how much.
 ```{r}
 #| echo: false
 
-summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")
-gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")
+summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")%>%select(-c("X"))
+gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")%>%select(-c("X"))
 
 gh_climate_timeseries<-summary_all_greathouses%>%
   gather(key=ID,value=climate_value,-c("year","variable"))
 
-gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))
+gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
 
-ggplot(data=gh_combined_timeseries,aes(years_until_disoccupation,climate_value))+
-  geom_point(alpha=0.8)+
-  geom_smooth(method="lm",se=T)+
+
+ggplot(data=gh_combined_timeseries,aes(years_until_dis_bin,climate_value))+
+  geom_boxplot()+
   facet_wrap(~variable,scale="free_y")
-
-
-
-
-gh_climate_timeseries_2<-summary_all_greathouses%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))%>%
-  subset(variable=="std_precipitation"|variable=="std_precipitation_change")%>%
-  group_by(variable,year)%>%
-  filter(climate_value >= quantile(climate_value, 0.9, na.rm=T))%>%
-  ungroup()
-
-gh_climate_timeseries_3<-summary_all_greathouses%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))%>%
-  subset(variable=="mean_precipitation_change")%>%
-  group_by(variable,year)%>%
-  filter(climate_value >= quantile(climate_value, 0.1, na.rm=T))%>%
-  ungroup()
-
-gh_climate_timeseries_4 <- rbind(gh_climate_timeseries_2,gh_climate_timeseries_3)
-
-gh_combined_timeseries <- merge(gh_climate_timeseries_4,gh_occupation_timeseries,by=c("ID","year"))
-
-ggplot(data=gh_combined_timeseries,aes(years_until_disoccupation,climate_value))+
-  geom_point(alpha=0.8)+
-  geom_smooth(method="lm",se=T)+
-  facet_wrap(~variable,scale="free")
-
 ```
 
 ## 4.0 VEP II North Study Area Site Data
@@ -334,26 +307,6 @@ vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIV
 ### 4.2 Synthesize climate data
 
 #### 4.2.1 Measures of Climate Stress
-
-Same as above
-
-rm(site_precip,
-
-site_var,
-
-mean_precipitation,
-
-z_precipitation,
-
-mean_change,
-
-std_change,
-
-absolute_change,
-
-cumulative_change,
-
-absolute_cumulative_change)
 
 ```{r}
 
@@ -426,7 +379,7 @@ rm(site_precip,
    mean_precipitation_change,
    std_precipitation_change)
 
-write.csv(summary_all_vep_habitations,"./OUTPUT/climatevariability_vep_habitations.csv")
+write.csv(summary_all_vep,"./OUTPUT/climatevariability_vep_habitations.csv")
 ```
 
 ### 4.3 Synthesize occupation timeline
@@ -445,7 +398,7 @@ vep_df <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE S
 vep_dates <- read.csv("./DATA/VEP_dates.csv")
 
 vep_occupation_timeseries<- left_join(vep_df,vep_dates,c("phase"="PHASE"))%>%
-  arrange(vep,desc(UNIQ_ID),BEGIN_D)%>%
+  arrange(.,desc(UNIQ_ID),BEGIN_D)%>%
   subset(value>0)%>%
   select(-c("phase","value"))%>%
   setNames(c("ID","BEGIN_DATE","END_DATE"))%>%
@@ -458,7 +411,7 @@ vep_occupation_timeseries<- left_join(vep_df,vep_dates,c("phase"="PHASE"))%>%
   mutate(year_until = find_years_until_disoccupation(year)-1)%>%
   setNames(c("ID","year","years_until_disoccupation"))
 
-write.csv(vep_occupation_timeseries,"./OUTPUT/greathouses_occupation_timeseries.csv")
+write.csv(vep_occupation_timeseries,"./OUTPUT/vep_occupation_timeseries.csv")
 rm(vep_dates,vep_df)
 ```
 
@@ -466,41 +419,62 @@ rm(vep_dates,vep_df)
 
 ```{r}
 #| echo: false
-# example script 
 
-vep_climate_timeseries_1<-summary_all_vep%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))%>%
-  subset(variable=="precip_mean"|variable=="precip_std_change"|variable=="precip_absolute_mean_change")
+summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")
+vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")
 
-vep_combined_timeseries <- merge(vep_climate_timeseries_1,vep_occupation_timeseries,by=c("ID","year"))
+vep_climate_timeseries<-summary_all_vep%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))
 
-ggplot(data=vep_combined_timeseries,aes(years_until_disoccupation,climate_value))+
-  geom_point(alpha=0.8)+
-  geom_smooth(method="lm",se=T)+
+vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
+
+ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
+  geom_boxplot()+
   facet_wrap(~variable,scale="free_y")
+```
 
-vep_climate_timeseries_2<-summary_all_vep%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))%>%
-  subset(variable=="precip_std_change"|variable=="precip_absolute_mean_change")%>%
-  group_by(variable)%>%
-  filter(climate_value >= quantile(climate_value, 0.9, na.rm=T))%>%
-  ungroup()
+## 5.0 Combine and analyze
 
-vep_climate_timeseries_3<-summary_all_vep%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))%>%
-  subset(variable=="precip_mean")%>%
-  group_by(variable)%>%
-  filter(climate_value >= quantile(climate_value, 0.1, na.rm=T))%>%
-  ungroup()
+```{r}
+#| echo: false
 
-vep_climate_timeseries_4 <- rbind(vep_climate_timeseries_2,vep_climate_timeseries_3)
+summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")%>%select(-c("X"))
+gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")%>%select(-c("X"))
 
-vep_combined_timeseries <- merge(vep_climate_timeseries_4,vep_occupation_timeseries,by=c("ID","year"))
+gh_climate_timeseries<-summary_all_greathouses%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))
 
-ggplot(data=vep_combined_timeseries,aes(years_until_disoccupation,climate_value))+
-  geom_point(alpha=0.8)+
-  geom_smooth(method="lm",se=T)+
-  scale_x_continuous(limits=c(0,400))+
-  facet_wrap(~variable,scale="free_y")
+summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")
+vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")
+
+vep_climate_timeseries<-summary_all_vep%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))
+
+master_output <- rbind(gh_climate_timeseries,vep_climate_timeseries)
+
+write.csv(master_output,"./OUTPUT/master_output.csv")
+```
+
+visualize
+
+```{r}
+master_output <- read.csv("./OUTPUT/master_output.csv")%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
+  
+png('./FIGURES/climate_variables.png',height=7000,width=18000,res=1200)
+ggplot(data=master_output,aes(years_until_dis_bin,climate_value))+
+  geom_sina(alpha=0.2,color="#8AB17D")+
+  facet_wrap(~variable,scale="free_y")+
+  labs(x="Years before Resettlement",
+       y="Cliamte Variable (mm)",
+       title="Comparison of Aridity vs. Variability")+
+    theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        plot.title = element_text(family="fss",size=150),
+        axis.title.x = element_text(family = "fsr",size=120,margin=margin(t=-75)),
+        axis.title.y = element_text(family = "fsr",size=120,margin=margin(r=-75,l=25)),
+        axis.text = element_text(family="fss",size=120),
+        legend.position="none")
+dev.off()
 
 ```
