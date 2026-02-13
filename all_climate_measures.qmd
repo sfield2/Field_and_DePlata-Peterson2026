@@ -1,0 +1,124 @@
+---
+title: "Field and DePlata-Peterson 2026"
+format: html
+editor: visual
+---
+
+# NOTES around all climate measures
+
+### 1.1 Synthesize climate data
+
+**NOTE:** in most places all of the change is either negative or positive, so usually absolute change is the additive inverse. However, in some places where some cells change positively and some negatively, the absolute change is different.
+
+#### 1.1.1 Measures of Climate Stress
+
+This analysis is used to tabulate several measures:
+
+1.  `mean_precipitation` - this is the mean annual precipitation within each catchment. This measure is used to test the assumption that years with lower mean precipitation (e.g., the most arid years) are good predictors of social stress.
+2.  `mean_change` - this is the mean year-to-year precipitation variability within each catchment. This measure is used to test the assumption that instances of greater negative year-to-year change (e.g., the most unexpectedly arid years) are good predictors of social stress.
+3.  `std_change` - this is the standard deviation year-to-year precipitation variability within each catchment. This measure is used to test the assumption that instances of greater change (regardless of direction) are good predictors of social stress.
+    1.  **Note**: This measure is similar to the next measure and might be remove
+4.  `absolute_change` - this is the absolute mean year-to-year variability within each catchment. This measure is used to test the assumption that instances of greater change (regardless of direction) are good predictors of social stress.
+    1.  **Note**: This measure is similar to the next measure and might be remove
+5.  `cumulative_change` - this is the net change in precipitation within each catchment. This measure is used to test the assumption that instances of greater negative change (e.g., the most unexpectedly arid years) are good predictors of social stress.
+6.  `absolute_cumulative_change` - this is the cumulative change in precipitation within each catchment, regardless of direction. This measure is used to test the assumption that instances of greater change (regardless of direction) are good predictors of social stress.
+
+```{r}
+for(i in 1:nrow(gh)){
+  site <- gh[i,]%>%
+    st_buffer(.,2000)%>%
+    st_transform(.,crs=4326)
+
+  site_name <- gh[i,c("SITE_NA")]%>%
+                st_drop_geometry()%>%
+                as.character()
+
+  site_precip <- terra::extract(r,site,exact=T)
+  site_var <- terra::extract(r_var,site,exact=T)
+
+  mean_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("precip_mean","year"))
+  
+  z_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    mutate(across(where(is.numeric),~as.numeric(scale(.))))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("precip_z","year"))
+  
+  mean_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("precip_mean_change","year"))
+
+  std_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("precip_std_change","year"))
+
+  absolute_change <- abs(site_var)%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("precip_absolute_mean_change","year"))
+
+  cumulative_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sum,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("precip_cumulative_change","year"))
+
+  absolute_cumulative_change <- abs(site_var)%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sum,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("precip_absolute_cumulative_change","year"))
+  
+  summary <- merge(mean_precipitation,z_precipitation,by="year")%>%
+    merge(.,mean_change,by="year")%>%
+    merge(.,std_change,by="year")%>%
+    merge(.,absolute_change,by="year")%>%
+    merge(.,cumulative_change,by="year")%>%
+    merge(.,absolute_cumulative_change,by="year")%>%
+    gather(.,key="variable",value="value",-year)%>%
+    setNames(c("year","variable",site_name))
+
+  if (i == 1){
+    summary_all_greathouses <- summary
+  }else {
+    summary_all_greathouses <- merge(summary_all_greathouses,summary, by=c("year","variable"))
+  }
+}
+
+rm(site_precip,
+   site_var,
+   mean_precipitation,
+   z_precipitation,
+   mean_change,
+   std_change,
+   absolute_change,
+   cumulative_change,
+   absolute_cumulative_change,
+   gh)
+
+write.csv(summary_all_greathouses,"./OUTPUT/climatevariability_greathouses.csv")
+```

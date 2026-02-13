@@ -16,7 +16,7 @@ View the raw source code and output at: provide link
 >
 > Field, S and M. DePlata-Peterson. 2026. *Article Name*, Version 1.0.0. Zenodo. \[DOI\]
 
-## Step 1: Set Up Environment
+## 1.0 Set Up Environment
 
 ```{r setup, include=FALSE}
 #| echo: false
@@ -33,9 +33,11 @@ for(p in packages) suppressPackageStartupMessages(library(p,quietly=T,character.
 theme_set(theme_bw())
 ```
 
-### Establish Unique Functions
+### 1.1 Establish Unique Functions
 
-This function is designed to identify an occupation end date and build a time series counting down until disoccupation.
+1.  `find_years_until_disoccupation` - this function is designed to identify an occupation end date and build a time series counting down until disoccupation.
+2.  `top_ten` - this...
+3.  `bottom_ten` - this..
 
 ```{r}
 #| echo: false
@@ -55,7 +57,7 @@ find_years_until_disoccupation <- function(x) {
 }
 ```
 
-## Step 2: Study Area and Paleoclimate Raster
+## 2.0 Study Area and Paleoclimate Raster
 
 Study area derived as extent of sites used in study.
 
@@ -86,10 +88,11 @@ After variability assessment is computed/exported, read in directly.
 
 ```{r}
 #| echo: false
+r <- terra::rast("./DATA/CLIMATE/PPT.tif")
 r_var <- terra::rast("./DATA/CLIMATE/PPT_annualvariability.tif")
 ```
 
-### Plotting Variability Raster
+### 2.1 Plotting Variability Raster
 
 ```{r}
 #| echo: false
@@ -115,18 +118,21 @@ Variability (mm)")+
   ease_aes("linear")+
   theme_minimal()
 
-animate(p, fps = 25,nframes = 701, width = 750, height = 600)
+animate(p, fps = 10,nframes = 701, width = 750, height = 600)
 
 anim_save("./FIGURES/raster_precip_variability_600to1300.gif")
 
 rm(r_var1)
 ```
 
-## Step 3: Chaco Great Houses
+## 3.0 Chaco Great Houses
 
-Accessed from:
+Accessed from Van Dyke and Heitman (2016) and Chaco Research Archive:
 
-### Import data
+1.  `chaco_greathouses`: this is the geodatabase of Chaco greathouses, collected by... **Note:** These data are not publicly available.
+2.  `outlier_database`: this is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive. Click [here](https://www.chacoarchive.org/cra/outlier-database/) to access.
+
+### 3.1 Import data
 
 ```{r}
 #| echo: false
@@ -153,79 +159,283 @@ gh <- merge(chaco_greathouses,outlier_database,by="SITE_NA")%>%
 rm(chaco_greathouses,outlier_database)
 ```
 
-### Synthesize climate data
+### 3.2 Synthesize climate data
 
 **NOTE:** in most places all of the change is either negative or positive, so usually absolute change is the additive inverse. However, in some places where some cells change positively and some negatively, the absolute change is different.
 
+#### 3.2.1 Measures of Climate Stress
+
+This analysis is used to tabulate several measures:
+
+1.  `mean_precipitation` - this is the mean annual precipitation within each catchment.
+    1.  This measure is used to test the assumption that years with lower mean precipitation (e.g., the most arid years) are good predictors of social stress.
+2.  `std_precipitation` - this is the annual standard deviation within each catchment.
+    1.  This measure is used to test the assumption that years with more variable precipitation (e.g., years when catchment is most varied) are good predictors of social stress.
+3.  `mean_precipitation_change` - this is the mean year-to-year precipitation variability within each catchment.
+    1.  This measure is used to test the assumption that instances of greater negative year-to-year change (e.g., the most unexpectedly arid years) are good predictors of social stress.
+4.  `std_precipitation_change` - this is the standard deviation year-to-year precipitation variability within each catchment.
+    1.  This measure is used to test the assumption that instances of greater change (regardless of direction) are good predictors of social stress.
+
 ```{r}
-# for(i in 1:nrow(gh)){
-#   site <- gh[i,]%>%
-#     st_buffer(.,2000)%>%
-#     st_transform(.,crs=4326)
-#   
-#   site_name <- gh[i,c("SITE_NA")]%>%
-#                 st_drop_geometry()%>%
-#                 as.character()
-#   
-#   site_var <- terra::extract(r_var,site,exact=T)
-#   
-#   
-#   mean_change <- site_var%>%
-#     select(-c("ID","fraction"))%>%
-#     summarise_all(mean,na.rm=T)%>%
-#     t()%>%
-#     as.data.frame()%>%
-#     mutate(year=2:2000)%>%
-#     setNames(c("precip_mean_change","year"))
-# 
-#   std_change <- site_var%>%
-#     select(-c("ID","fraction"))%>%
-#     summarise_all(sd,na.rm=T)%>%
-#     t()%>%
-#     as.data.frame()%>%
-#     mutate(year=2:2000)%>%
-#     setNames(c("precip_std_change","year"))
-# 
-#   absolute_change <- abs(site_var)%>%
-#     select(-c("ID","fraction"))%>%
-#     summarise_all(mean,na.rm=T)%>%
-#     t()%>%
-#     as.data.frame()%>%
-#     mutate(year=2:2000)%>%
-#     setNames(c("precip_absolutemean_change","year"))
-#   
-# 
-#   summary <- merge(mean_change,std_change,by="year")%>%
-#     merge(.,absolute_change,by="year")%>%
-#     gather(.,key="variable",value="value",-year)%>%
-#     setNames(c("year","variable",site_name))
-# 
-#   if (i == 1){
-#     summary_all_greathouses <- summary
-#   }else {
-#     summary_all_greathouses <- merge(summary_all_greathouses,summary, by=c("year","variable"))
-#   }
-# }
-# 
-# write.csv(summary_all_greathouses,"./OUTPUT/climatevariability_greathouses.csv")
+for(i in 1:nrow(gh)){
+  site <- gh[i,]%>%
+    st_buffer(.,2000)%>%
+    st_transform(.,crs=4326)
+
+  site_name <- gh[i,c("SITE_NA")]%>%
+                st_drop_geometry()%>%
+                as.character()
+
+  site_precip <- terra::extract(r,site,exact=T)
+  
+  site_var <- terra::extract(r_var,site,exact=T)
+
+  mean_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("mean_precipitation","year"))
+  
+  std_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("std_precipitation","year"))
+  
+  mean_precipitation_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("mean_precipitation_change","year"))
+
+  std_precipitation_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("std_precipitation_change","year"))
+
+  
+  summary <- merge(mean_precipitation,std_precipitation,by="year")%>%
+    merge(.,mean_precipitation_change,by="year")%>%
+    merge(.,std_precipitation_change,by="year")%>%
+    gather(.,key="variable",value="value",-year)%>%
+    setNames(c("year","variable",site_name))
+
+  if (i == 1){
+    summary_all_greathouses <- summary
+  }else {
+    summary_all_greathouses <- merge(summary_all_greathouses,summary, by=c("year","variable"))
+  }
+}
+
+rm(site_precip,
+   site_var,
+   mean_precipitation,
+   std_precipitation,
+   mean_precipitation_change,
+   std_precipitation_change)
+
+write.csv(summary_all_greathouses,"./OUTPUT/climatevariability_greathouses.csv")
 ```
 
-## Step 4: VEP II North Study Area Site Data
+### 3.3 Synthesize occupation timeline
 
-Accessed from:
-
-### Import data
+Update occupation timeline to know years until disoccupation for all great houses.
 
 ```{r}
 #| echo: false
-# example script
+gh_occupation_timeseries <- gh %>%
+  rowwise() %>%
+  st_drop_geometry()%>%
+  mutate(year = list(BEGIN_DATE:END_DATE)) %>%
+  unnest(year) %>%
+  select(c("SITE_NA", "year"))%>%
+  group_by(SITE_NA)%>%
+  mutate(year_until = find_years_until_disoccupation(year)-1)%>%
+  setNames(c("ID","year","years_until_disoccupation"))
+
+write.csv(gh_occupation_timeseries,"./OUTPUT/greathouses_occupation_timeseries.csv")
+
+rm(gh)
+```
+
+### 3.4 Compare occupation and climate variables
+
+Results showing that std and change better predictors than how much.
+
+```{r}
+#| echo: false
+
+summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")
+gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")
+
+gh_climate_timeseries<-summary_all_greathouses%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))
+
+gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))
+
+ggplot(data=gh_combined_timeseries,aes(years_until_disoccupation,climate_value))+
+  geom_point(alpha=0.8)+
+  geom_smooth(method="lm",se=T)+
+  facet_wrap(~variable,scale="free_y")
+
+
+
+
+gh_climate_timeseries_2<-summary_all_greathouses%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  subset(variable=="std_precipitation"|variable=="std_precipitation_change")%>%
+  group_by(variable,year)%>%
+  filter(climate_value >= quantile(climate_value, 0.9, na.rm=T))%>%
+  ungroup()
+
+gh_climate_timeseries_3<-summary_all_greathouses%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  subset(variable=="mean_precipitation_change")%>%
+  group_by(variable,year)%>%
+  filter(climate_value >= quantile(climate_value, 0.1, na.rm=T))%>%
+  ungroup()
+
+gh_climate_timeseries_4 <- rbind(gh_climate_timeseries_2,gh_climate_timeseries_3)
+
+gh_combined_timeseries <- merge(gh_climate_timeseries_4,gh_occupation_timeseries,by=c("ID","year"))
+
+ggplot(data=gh_combined_timeseries,aes(years_until_disoccupation,climate_value))+
+  geom_point(alpha=0.8)+
+  geom_smooth(method="lm",se=T)+
+  facet_wrap(~variable,scale="free")
+
+```
+
+## 4.0 VEP II North Study Area Site Data
+
+Accessed from:
+
+### 4.1 Import data
+
+```{r}
 vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
   st_as_sf(.,coords=c("UTMEast","UTMNorth"),crs=26912)%>%
   st_transform(.,crs=4269)%>%
   st_intersection(.,study_extent)%>%
-  mutate(UNIQ_ID = 1:nrow(.))
+  mutate(UNIQ_ID = 1:nrow(.))%>%
+  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
+  subset(N.roomblocks >= 1)
+```
 
+### 4.2 Synthesize climate data
+
+#### 4.2.1 Measures of Climate Stress
+
+Same as above
+
+rm(site_precip,
+
+site_var,
+
+mean_precipitation,
+
+z_precipitation,
+
+mean_change,
+
+std_change,
+
+absolute_change,
+
+cumulative_change,
+
+absolute_cumulative_change)
+
+```{r}
+
+for(i in 1:nrow(vepii_sites)){
+  site <- vepii_sites[i,]%>%
+    st_buffer(.,2000)%>%
+    st_transform(.,crs=4326)
+
+  site_name <- vepii_sites[i,c("UNIQ_ID")]%>%
+                st_drop_geometry()%>%
+                as.character()
+
+  site_precip <- terra::extract(r,site,exact=T)
+  site_var <- terra::extract(r_var,site,exact=T)
+
+  site_precip <- terra::extract(r,site,exact=T)
+  
+  site_var <- terra::extract(r_var,site,exact=T)
+
+  mean_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("mean_precipitation","year"))
+  
+  std_precipitation <- site_precip%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=1:2000)%>%
+    setNames(c("std_precipitation","year"))
+  
+  mean_precipitation_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("mean_precipitation_change","year"))
+
+  std_precipitation_change <- site_var%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=2:2000)%>%
+    setNames(c("std_precipitation_change","year"))
+
+  
+  summary <- merge(mean_precipitation,std_precipitation,by="year")%>%
+    merge(.,mean_precipitation_change,by="year")%>%
+    merge(.,std_precipitation_change,by="year")%>%
+    gather(.,key="variable",value="value",-year)%>%
+    setNames(c("year","variable",site_name))
+
+  if (i == 1){
+    summary_all_vep <- summary
+  }else {
+    summary_all_vep <- merge(summary_all_vep,summary, by=c("year","variable"))
+  }
+}
+
+rm(site_precip,
+   site_var,
+   mean_precipitation,
+   std_precipitation,
+   mean_precipitation_change,
+   std_precipitation_change)
+
+write.csv(summary_all_vep_habitations,"./OUTPUT/climatevariability_vep_habitations.csv")
+```
+
+### 4.3 Synthesize occupation timeline
+
+```{r}
+#| echo: false
 vep_df <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
+  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
+  subset(N.roomblocks >= 1)%>%
   select(c("ph6","ph7","ph8","ph9","ph10","ph11","ph12",
            "ph13","ph14","ph15","ph16","ph17","ph18","ph19"))%>%
   mutate(UNIQ_ID = 1:nrow(.))%>%
@@ -234,23 +444,22 @@ vep_df <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE S
 
 vep_dates <- read.csv("./DATA/VEP_dates.csv")
 
-vep <- left_join(vep_df,vep_dates,c("phase"="PHASE"))
-
-rm(vep_dates)
-
-vep<- arrange(vep,desc(UNIQ_ID),BEGIN_D)
-
-expanded_vep <- vep %>%
+vep_occupation_timeseries<- left_join(vep_df,vep_dates,c("phase"="PHASE"))%>%
+  arrange(vep,desc(UNIQ_ID),BEGIN_D)%>%
+  subset(value>0)%>%
+  select(-c("phase","value"))%>%
+  setNames(c("ID","BEGIN_DATE","END_DATE"))%>%
   rowwise() %>%
-  mutate(year = list(BEGIN_D:END_DAT)) %>%
+  st_drop_geometry()%>%
+  mutate(year = list(BEGIN_DATE:END_DATE)) %>%
   unnest(year) %>%
-  select(UNIQ_ID, year, value) 
+  select(c("ID", "year"))%>%
+  group_by(ID)%>%
+  mutate(year_until = find_years_until_disoccupation(year)-1)%>%
+  setNames(c("ID","year","years_until_disoccupation"))
 
-vep_years <- expanded_vep%>%
-  group_by(UNIQ_ID)%>%
-  mutate(year_until = find_years_until_disoccupation(value))%>%
-  setNames(c("UNIQ_ID","Year","occupation","years_until_disoccupation"))
-
+write.csv(vep_occupation_timeseries,"./OUTPUT/greathouses_occupation_timeseries.csv")
+rm(vep_dates,vep_df)
 ```
 
 ### Synthesize climate data
@@ -259,10 +468,39 @@ vep_years <- expanded_vep%>%
 #| echo: false
 # example script 
 
-```
+vep_climate_timeseries_1<-summary_all_vep%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  subset(variable=="precip_mean"|variable=="precip_std_change"|variable=="precip_absolute_mean_change")
 
-## Step 5: Synthesize Chaco and VEP data
+vep_combined_timeseries <- merge(vep_climate_timeseries_1,vep_occupation_timeseries,by=c("ID","year"))
 
-```{r}
-#| echo: false
+ggplot(data=vep_combined_timeseries,aes(years_until_disoccupation,climate_value))+
+  geom_point(alpha=0.8)+
+  geom_smooth(method="lm",se=T)+
+  facet_wrap(~variable,scale="free_y")
+
+vep_climate_timeseries_2<-summary_all_vep%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  subset(variable=="precip_std_change"|variable=="precip_absolute_mean_change")%>%
+  group_by(variable)%>%
+  filter(climate_value >= quantile(climate_value, 0.9, na.rm=T))%>%
+  ungroup()
+
+vep_climate_timeseries_3<-summary_all_vep%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  subset(variable=="precip_mean")%>%
+  group_by(variable)%>%
+  filter(climate_value >= quantile(climate_value, 0.1, na.rm=T))%>%
+  ungroup()
+
+vep_climate_timeseries_4 <- rbind(vep_climate_timeseries_2,vep_climate_timeseries_3)
+
+vep_combined_timeseries <- merge(vep_climate_timeseries_4,vep_occupation_timeseries,by=c("ID","year"))
+
+ggplot(data=vep_combined_timeseries,aes(years_until_disoccupation,climate_value))+
+  geom_point(alpha=0.8)+
+  geom_smooth(method="lm",se=T)+
+  scale_x_continuous(limits=c(0,400))+
+  facet_wrap(~variable,scale="free_y")
+
 ```
