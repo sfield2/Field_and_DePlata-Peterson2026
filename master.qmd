@@ -105,7 +105,7 @@ df <- as.data.frame(r_var1,xy=T)%>%
 
 p <- ggplot() +
   geom_raster(data=df, aes(x = x, y = y, fill = value)) +
-  scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a780","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
+  scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
 name = "Precipitation 
 Variability (mm)")+
   geom_sf(data=study_extent,col="grey20",fill=NA)+
@@ -118,7 +118,7 @@ Variability (mm)")+
   ease_aes("linear")+
   theme_minimal()
 
-animate(p, fps = 10,nframes = 701, width = 750, height = 600)
+animate(p, fps = 5,nframes = 701, width = 750, height = 600)
 
 anim_save("./FIGURES/raster_precip_variability_600to1300.gif")
 
@@ -420,13 +420,16 @@ rm(vep_dates,vep_df)
 ```{r}
 #| echo: false
 
-summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")
-vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")
+summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")%>%select(-c("X"))
+
+vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")%>%select(-c("X"))
 
 vep_climate_timeseries<-summary_all_vep%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))
+  gather(key=ID,value=climate_value,-c("year","variable"))%>%
+  mutate(ID=as.numeric(sub("^X","",ID)))
 
-vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
+vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))%>%
+mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
 
 ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
   geom_boxplot()+
@@ -437,20 +440,7 @@ ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
 
 ```{r}
 #| echo: false
-
-summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")%>%select(-c("X"))
-gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")%>%select(-c("X"))
-
-gh_climate_timeseries<-summary_all_greathouses%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))
-
-summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")
-vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")
-
-vep_climate_timeseries<-summary_all_vep%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))
-
-master_output <- rbind(gh_climate_timeseries,vep_climate_timeseries)
+master_output <- rbind(gh_combined_timeseries,vep_combined_timeseries)
 
 write.csv(master_output,"./OUTPUT/master_output.csv")
 ```
@@ -458,8 +448,8 @@ write.csv(master_output,"./OUTPUT/master_output.csv")
 visualize
 
 ```{r}
-master_output <- read.csv("./OUTPUT/master_output.csv")%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
-  
+master_output <- read.csv("./OUTPUT/master_output.csv")
+
 png('./FIGURES/climate_variables.png',height=7000,width=18000,res=1200)
 ggplot(data=master_output,aes(years_until_dis_bin,climate_value))+
   geom_sina(alpha=0.2,color="#8AB17D")+
@@ -470,10 +460,10 @@ ggplot(data=master_output,aes(years_until_dis_bin,climate_value))+
     theme_minimal()+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
-        plot.title = element_text(family="fss",size=150),
-        axis.title.x = element_text(family = "fsr",size=120,margin=margin(t=-75)),
-        axis.title.y = element_text(family = "fsr",size=120,margin=margin(r=-75,l=25)),
-        axis.text = element_text(family="fss",size=120),
+        plot.title = element_text(family="fss",size=20),
+        axis.title.x = element_text(family = "fsr",size=15,margin=margin(t=-75)),
+        axis.title.y = element_text(family = "fsr",size=20,margin=margin(r=-75,l=25)),
+        axis.text = element_text(family="fss",size=15),
         legend.position="none")
 dev.off()
 
