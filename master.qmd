@@ -35,9 +35,7 @@ theme_set(theme_bw())
 
 ### 1.1 Establish Unique Functions
 
-1.  `find_years_until_disoccupation` - this function is designed to identify an occupation end date and build a time series counting down until disoccupation.
-2.  `top_ten` - this...
-3.  `bottom_ten` - this..
+1.  `find_years_until_disoccupation` - this function is designed to identify an occupation end date and build a time series counting down until disoccupation. b
 
 ```{r}
 #| echo: false
@@ -280,12 +278,12 @@ gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries
 gh_climate_timeseries<-summary_all_greathouses%>%
   gather(key=ID,value=climate_value,-c("year","variable"))
 
-gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
+gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
 
 
-ggplot(data=gh_combined_timeseries,aes(years_until_dis_bin,climate_value))+
-  geom_boxplot()+
-  facet_wrap(~variable,scale="free_y")
+# ggplot(data=gh_combined_timeseries,aes(years_until_dis_bin,climate_value))+
+#   geom_boxplot()+
+#   facet_wrap(~variable,scale="free_y")
 ```
 
 ## 4.0 VEP II North Study Area Site Data
@@ -415,7 +413,7 @@ write.csv(vep_occupation_timeseries,"./OUTPUT/vep_occupation_timeseries.csv")
 rm(vep_dates,vep_df)
 ```
 
-### Synthesize climate data
+### 4.4 Synthesize climate data
 
 ```{r}
 #| echo: false
@@ -429,11 +427,11 @@ vep_climate_timeseries<-summary_all_vep%>%
   mutate(ID=as.numeric(sub("^X","",ID)))
 
 vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))%>%
-mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,50,100,150,200,250,300,350,400,Inf),labels=c("0-50","51-100","101-150","151-200","201-250","251-300","301-350","351-400","400+")))
+mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
 
-ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
-  geom_boxplot()+
-  facet_wrap(~variable,scale="free_y")
+# ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
+#   geom_boxplot()+
+#   facet_wrap(~variable,scale="free_y")
 ```
 
 ## 5.0 Combine and analyze
@@ -445,26 +443,125 @@ master_output <- rbind(gh_combined_timeseries,vep_combined_timeseries)
 write.csv(master_output,"./OUTPUT/master_output.csv")
 ```
 
-visualize
+### 5.1 Broad correlations
+
+Calculate correlations in these metrics.
 
 ```{r}
-master_output <- read.csv("./OUTPUT/master_output.csv")
+#| echo: false
+#master_output <- read.csv("./OUTPUT/master_output.csv")
 
-png('./FIGURES/climate_variables.png',height=7000,width=18000,res=1200)
-ggplot(data=master_output,aes(years_until_dis_bin,climate_value))+
-  geom_sina(alpha=0.2,color="#8AB17D")+
-  facet_wrap(~variable,scale="free_y")+
+master_mean <- subset(master_output, variable == "mean_precipitation")%>%
+  subset(., years_until_disoccupation <=400)
+master_std <- subset(master_output, variable == "std_precipitation")%>%
+  subset(., years_until_disoccupation <=400)
+change_mean <- subset(master_output, variable == "mean_precipitation_change")%>%
+  subset(., years_until_disoccupation <=400)
+change_std <- subset(master_output, variable == "std_precipitation_change")%>%
+  subset(., years_until_disoccupation <=400)
+
+m_test <- cor.test(master_mean$years_until_disoccupation, master_mean$climate_value)
+
+std_test <- cor.test(master_std$years_until_disoccupation, master_std$climate_value)
+
+m_change_test <- cor.test(change_mean$years_until_disoccupation, change_mean$climate_value)
+
+std_change_test <- cor.test(change_std$years_until_disoccupation, change_std$climate_value)
+
+print("The correlation for Mean Precipitation is:")
+print(m_test$estimate)
+print(m_test$p.value)
+
+print("The correlation for Std Precipitation is:")
+print(std_test$estimate)
+print(std_test$p.value)
+
+print("The correlation for Mean Precipitation Change is:")
+print(m_change_test$estimate)
+print(m_change_test$p.value)
+
+print("The correlation for Std Precipitation Change is:")
+print(std_change_test$estimate)
+print(std_change_test$p.value)
+
+```
+
+```{r}
+highest_precip <- master_mean%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
+  ungroup()
+
+lowest_precip  <- master_mean%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value <= quantile(climate_value, 0.25, na.rm = TRUE)) %>%
+  ungroup()
+
+
+cor.test(highest_precip$years_until_disoccupation,highest_precip$climate_value)
+cor.test(lowest_precip$years_until_disoccupation,lowest_precip$climate_value)
+
+
+png('./FIGURES/mean_precipitation.png',height=15000,width=17000,res=1200)
+ggplot()+
+  geom_point(data=master_mean,aes(years_until_disoccupation,climate_value,color=climate_value),alpha=0.1,shape=21, fill=NA,size=2,stroke=1.25)+
+  scale_color_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 375),
+name = NULL)+
+  geom_smooth(data=master_mean,aes(years_until_disoccupation,climate_value),method="lm",se=F,color="grey20",linetype="dotdash")+
+  geom_point(data=highest_precip,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#005f73",shape=21, fill=NA,size=2,stroke=1.25)+
+  geom_point(data=lowest_precip,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#bb3e03",shape=21, fill=NA,size=2,stroke=1.25)+
   labs(x="Years before Resettlement",
-       y="Cliamte Variable (mm)",
-       title="Comparison of Aridity vs. Variability")+
-    theme_minimal()+
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
-        plot.title = element_text(family="fss",size=20),
-        axis.title.x = element_text(family = "fsr",size=15,margin=margin(t=-75)),
-        axis.title.y = element_text(family = "fsr",size=20,margin=margin(r=-75,l=25)),
-        axis.text = element_text(family="fss",size=15),
-        legend.position="none")
+       y="Precipitation (mm)",
+       title=NULL)+
+    theme_minimal()
 dev.off()
+```
 
+```{r}
+highest_precip_change <- change_mean%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
+  ungroup()
+
+lowest_precip_change  <- change_mean%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value <= quantile(climate_value, 0.25, na.rm = TRUE)) %>%
+  ungroup()
+
+cor.test(lowest_precip_change$years_until_disoccupation,lowest_precip_change$climate_value)
+
+png('./FIGURES/mean_precipitation_change.png',height=15000,width=17000,res=1200)
+ggplot()+
+  geom_point(data=change_mean,aes(years_until_disoccupation,climate_value,color=climate_value),alpha=0.1,shape=21, fill=NA,size=2,stroke=1.25)+
+  scale_color_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
+name = NULL)+
+  geom_smooth(data=change_mean,aes(years_until_disoccupation,climate_value),method="lm",se=F,color="grey20",linetype="dotdash")+
+  geom_point(data=highest_precip_change,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#005f73",shape=21, fill=NA,size=2,stroke=1.25)+
+  geom_point(data=lowest_precip_change,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#bb3e03",shape=21, fill=NA,size=2,stroke=1.25)+
+  labs(x="Years before Resettlement",
+       y="Year-to-year Precipitation Change (mm)",
+       title=NULL)+
+    theme_minimal()
+dev.off()
+```
+
+### 5.2 Outlying variability and outlying aridity
+
+Calculate correlations among those things.
+
+```{r}
+highest_std <- master_std%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
+  ungroup()
+
+highest_change_std <- change_std%>%
+  group_by(years_until_disoccupation) %>%
+  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
+  ungroup()
+
+
+cor.test(highest_std$years_until_disoccupation,highest_std$climate_value)
+
+cor.test(highest_change_std$years_until_disoccupation,highest_change_std$climate_value)
 ```
