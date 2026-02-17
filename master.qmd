@@ -571,10 +571,10 @@ for(i in 1:50){
 #| echo: false
 
 ggplot()+
-  geom_line(data=mean_df,aes(percentile_for_plot,cor_coef),col="#bb3e03")+
-  geom_line(data=std_df,aes(percentile,cor_coef),col="#ee9b00")+
-  geom_line(data=mean_change_df,aes(percentile_for_plot,cor_coef),col="#94d2bd")+
-  geom_line(data=std_change_df,aes(percentile,cor_coef),col="#005f73")
+  geom_line(data=mean_df,aes(percentile_for_plot,cor_coef),col="#bb3e03",lwd=1.2)+
+  geom_line(data=std_df,aes(percentile,cor_coef),col="#ee9b00",lwd=1.2)+
+  geom_line(data=mean_change_df,aes(percentile_for_plot,cor_coef),col="#94d2bd",lwd=1.2)+
+  geom_line(data=std_change_df,aes(percentile,cor_coef),col="#005f73",lwd=1.2)
 
 max(mean_change_df$cor_coef)
 min(std_change_df$cor_coef)
