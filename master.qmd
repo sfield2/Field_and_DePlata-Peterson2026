@@ -12,9 +12,9 @@ View the raw source code and output at: provide link
 
 **When using the code included in this research compendium, please cite *all* of the following:**
 
-> Field, S and M. DePlata-Peterson. 2026. *Article Name*. Journal Location, In review.
+> Field, S and M. DePlata-Peterson. 2026. *Variability as a Driver of Re-settlement in the northern US Southwest*. Journal of Archaeological Science, In Prep.
 >
-> Field, S and M. DePlata-Peterson. 2026. *Article Name*, Version 1.0.0. Zenodo. \[DOI\]
+> Field, S and M. DePlata-Peterson. 2026. *Research Compendium for Variability as a Driver of Re-settlement in the northern US Southwest*., Version 1.0.0. Zenodo. \[DOI\]
 
 ## 1.0 Set Up Environment
 
@@ -144,6 +144,7 @@ outlier_database <-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SE
   setNames(c("SITE_NA","SITE_NUMBE","BEGIN_DATE","END_DATE"))
 
 gh <- merge(chaco_greathouses,outlier_database,by="SITE_NA")%>%
+  subset(SITE_T == "GH_OUTLIER") %>%
   filter(!is.na(BEGIN_DATE))%>%
   filter(!is.na(END_DATE))%>%
   subset(BEGIN_DATE != "No Data")%>%
@@ -278,7 +279,9 @@ gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries
 gh_climate_timeseries<-summary_all_greathouses%>%
   gather(key=ID,value=climate_value,-c("year","variable"))
 
-gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))%>%mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
+gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))
+
+# mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
 
 
 # ggplot(data=gh_combined_timeseries,aes(years_until_dis_bin,climate_value))+
@@ -294,6 +297,10 @@ Accessed from:
 
 ```{r}
 vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
+  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
+  subset(N.roomblocks >= 1)%>%
+  subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
+  #subset(Dataquality != 3)%>%
   st_as_sf(.,coords=c("UTMEast","UTMNorth"),crs=26912)%>%
   st_transform(.,crs=4269)%>%
   st_intersection(.,study_extent)%>%
@@ -387,6 +394,8 @@ write.csv(summary_all_vep,"./OUTPUT/climatevariability_vep_habitations.csv")
 vep_df <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
   subset(tlkp.Site.Function_DescGen=="Habitation")%>%
   subset(N.roomblocks >= 1)%>%
+  subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
+  #subset(Dataquality != 3)%>%
   select(c("ph6","ph7","ph8","ph9","ph10","ph11","ph12",
            "ph13","ph14","ph15","ph16","ph17","ph18","ph19"))%>%
   mutate(UNIQ_ID = 1:nrow(.))%>%
@@ -429,9 +438,9 @@ vep_climate_timeseries<-summary_all_vep%>%
 vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))%>%
 mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
 
-# ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
-#   geom_boxplot()+
-#   facet_wrap(~variable,scale="free_y")
+ggplot(data=vep_combined_timeseries,aes(years_until_dis_bin,climate_value))+
+  geom_boxplot()+
+  facet_wrap(~variable,scale="free_y")
 ```
 
 ## 5.0 Combine and analyze
@@ -449,100 +458,27 @@ Calculate correlations in these metrics.
 
 ```{r}
 #| echo: false
-#master_output <- read.csv("./OUTPUT/master_output.csv")
+master_output <- read.csv("./OUTPUT/master_output.csv")
 
-master_mean <- subset(master_output, variable == "mean_precipitation")%>%
-  subset(., years_until_disoccupation <=400)
-master_std <- subset(master_output, variable == "std_precipitation")%>%
-  subset(., years_until_disoccupation <=400)
-change_mean <- subset(master_output, variable == "mean_precipitation_change")%>%
-  subset(., years_until_disoccupation <=400)
-change_std <- subset(master_output, variable == "std_precipitation_change")%>%
-  subset(., years_until_disoccupation <=400)
-
-m_test <- cor.test(master_mean$years_until_disoccupation, master_mean$climate_value)
-
-std_test <- cor.test(master_std$years_until_disoccupation, master_std$climate_value)
-
-m_change_test <- cor.test(change_mean$years_until_disoccupation, change_mean$climate_value)
-
-std_change_test <- cor.test(change_std$years_until_disoccupation, change_std$climate_value)
-
-print("The correlation for Mean Precipitation is:")
-print(m_test$estimate)
-print(m_test$p.value)
-
-print("The correlation for Std Precipitation is:")
-print(std_test$estimate)
-print(std_test$p.value)
-
-print("The correlation for Mean Precipitation Change is:")
-print(m_change_test$estimate)
-print(m_change_test$p.value)
-
-print("The correlation for Std Precipitation Change is:")
-print(std_change_test$estimate)
-print(std_change_test$p.value)
-
+mean(master_output$years_until_disoccupation)
+sd(master_output$years_until_disoccupation)
 ```
 
 ```{r}
-highest_precip <- master_mean%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
-  ungroup()
+#| echo: false
 
-lowest_precip  <- master_mean%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value <= quantile(climate_value, 0.25, na.rm = TRUE)) %>%
-  ungroup()
-
-
-cor.test(highest_precip$years_until_disoccupation,highest_precip$climate_value)
-cor.test(lowest_precip$years_until_disoccupation,lowest_precip$climate_value)
-
-
-png('./FIGURES/mean_precipitation.png',height=15000,width=17000,res=1200)
-ggplot()+
-  geom_point(data=master_mean,aes(years_until_disoccupation,climate_value,color=climate_value),alpha=0.1,shape=21, fill=NA,size=2,stroke=1.25)+
-  scale_color_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 375),
-name = NULL)+
-  geom_smooth(data=master_mean,aes(years_until_disoccupation,climate_value),method="lm",se=F,color="grey20",linetype="dotdash")+
-  geom_point(data=highest_precip,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#005f73",shape=21, fill=NA,size=2,stroke=1.25)+
-  geom_point(data=lowest_precip,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#bb3e03",shape=21, fill=NA,size=2,stroke=1.25)+
+png('./FIGURES/all.png',height=15000,width=20000,res=1200)
+ggplot(data=master_output,aes(years_until_disoccupation,climate_value))+
+  geom_point(alpha=0.1,shape=21, fill=NA,size=2,stroke=1.25,col="#8AB17D")+
+  geom_smooth(method="lm",se=F,color="grey20",linetype="dotdash")+
   labs(x="Years before Resettlement",
-       y="Precipitation (mm)",
+       y="Climate Variable (mm)",
        title=NULL)+
-    theme_minimal()
+    theme_minimal()+
+  facet_wrap(~variable,scale="free_y")
 dev.off()
-```
 
-```{r}
-highest_precip_change <- change_mean%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
-  ungroup()
 
-lowest_precip_change  <- change_mean%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value <= quantile(climate_value, 0.25, na.rm = TRUE)) %>%
-  ungroup()
-
-cor.test(lowest_precip_change$years_until_disoccupation,lowest_precip_change$climate_value)
-
-png('./FIGURES/mean_precipitation_change.png',height=15000,width=17000,res=1200)
-ggplot()+
-  geom_point(data=change_mean,aes(years_until_disoccupation,climate_value,color=climate_value),alpha=0.1,shape=21, fill=NA,size=2,stroke=1.25)+
-  scale_color_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
-name = NULL)+
-  geom_smooth(data=change_mean,aes(years_until_disoccupation,climate_value),method="lm",se=F,color="grey20",linetype="dotdash")+
-  geom_point(data=highest_precip_change,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#005f73",shape=21, fill=NA,size=2,stroke=1.25)+
-  geom_point(data=lowest_precip_change,aes(years_until_disoccupation,climate_value),alpha=0.1,color="#bb3e03",shape=21, fill=NA,size=2,stroke=1.25)+
-  labs(x="Years before Resettlement",
-       y="Year-to-year Precipitation Change (mm)",
-       title=NULL)+
-    theme_minimal()
-dev.off()
 ```
 
 ### 5.2 Outlying variability and outlying aridity
@@ -550,18 +486,541 @@ dev.off()
 Calculate correlations among those things.
 
 ```{r}
-highest_std <- master_std%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
-  ungroup()
+#| echo: false
 
-highest_change_std <- change_std%>%
-  group_by(years_until_disoccupation) %>%
-  filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
-  ungroup()
+master_mean <- subset(master_output, variable == "mean_precipitation")
+master_std <- subset(master_output, variable == "std_precipitation")
+change_mean <- subset(master_output, variable == "mean_precipitation_change")
+change_std <- subset(master_output, variable == "std_precipitation_change")
+#subset(., years_until_disoccupation <= 407)
+
+mean_df <- as.data.frame(matrix(0,50,3))%>%
+  setNames(c("percentile","cor_coef","p_value"))%>%
+  mutate(percentile = seq(0.01, 0.5, by = 0.01))%>%
+  mutate(percentile_for_plot = seq(0.99,0.5, by = -0.01))
+
+std_df <- as.data.frame(matrix(0,50,3))%>%
+  setNames(c("percentile","cor_coef","p_value"))%>%
+  mutate(percentile = seq(0.5, 0.99, by = 0.01))
+
+mean_change_df <- as.data.frame(matrix(0,50,3))%>%
+  setNames(c("percentile","cor_coef","p_value"))%>%
+  mutate(percentile = seq(0.01, 0.5, by = 0.01))%>%
+  mutate(percentile_for_plot = seq(0.99,0.5, by = -0.01))
+
+std_change_df <- as.data.frame(matrix(0,50,3))%>%
+  setNames(c("percentile","cor_coef","p_value"))%>%
+  mutate(percentile = seq(0.5, 0.99, by = 0.01))
 
 
-cor.test(highest_std$years_until_disoccupation,highest_std$climate_value)
+for(i in 1:50){
+  perc_low <- mean_df[i,1] # for measuring amount of precip/negative cahnge (means)
+  
+  perc_high <- std_df[i,1] # for measuring amount of variability (std)
+  
+  # mean precip
+  mean_sub <- master_mean%>%
+    group_by(years_until_disoccupation) %>%
+    filter(climate_value <= quantile(climate_value, perc_low, na.rm = TRUE)) %>%
+    ungroup()
+  
+  m_s_test <- cor.test(mean_sub$years_until_disoccupation,mean_sub$climate_value)
+  
+  mean_df[i,c("cor_coef")] <- m_s_test$estimate
+  mean_df[i,c("p_value")] <- m_s_test$p.value
+  
+  # std precip
+  std_sub <- master_std%>%
+    group_by(years_until_disoccupation) %>%
+    filter(climate_value >= quantile(climate_value, perc_high, na.rm = TRUE)) %>%
+    ungroup()
+  
+  s_s_test <- cor.test(std_sub$years_until_disoccupation,std_sub$climate_value)
+  
+  std_df[i,c("cor_coef")] <- s_s_test$estimate
+  std_df[i,c("p_value")] <- s_s_test$p.value
+  
+  
+  # mean precip change
+  mean_change_sub <- change_mean%>%
+    group_by(years_until_disoccupation) %>%
+    filter(climate_value <= quantile(climate_value, perc_low, na.rm = TRUE)) %>%
+    ungroup()
+  
+  m_c_test <- cor.test(mean_change_sub$years_until_disoccupation,mean_change_sub$climate_value)
+  
+  mean_change_df[i,c("cor_coef")] <- m_c_test$estimate
+  mean_change_df[i,c("p_value")] <- m_c_test$p.value
+  
+  # std precip
+  std_change_sub <- change_std%>%
+    group_by(years_until_disoccupation) %>%
+    filter(climate_value >= quantile(climate_value, perc_high, na.rm = TRUE)) %>%
+    ungroup()
+  
+  s_c_test <- cor.test(std_change_sub$years_until_disoccupation,std_change_sub$climate_value)
+  
+  std_change_df[i,c("cor_coef")] <- s_c_test$estimate
+  std_change_df[i,c("p_value")] <- s_c_test$p.value
+  
+}
 
-cor.test(highest_change_std$years_until_disoccupation,highest_change_std$climate_value)
+```
+
+```{r}
+#| echo: false
+
+ggplot()+
+  geom_line(data=mean_df,aes(percentile_for_plot,cor_coef),col="#bb3e03")+
+  geom_line(data=std_df,aes(percentile,cor_coef),col="#ee9b00")+
+  geom_line(data=mean_change_df,aes(percentile_for_plot,cor_coef),col="#94d2bd")+
+  geom_line(data=std_change_df,aes(percentile,cor_coef),col="#005f73")
+
+max(mean_change_df$cor_coef)
+min(std_change_df$cor_coef)
+```
+
+```{r}
+test <- subset(vepii_sites,UNIQ_ID == 2938)
+```
+
+```{r}
+# 
+# dendro_dates <- read.csv("./DATA/DENDRO_DATA/BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
+#   st_as_sf(.,coords=c("LON","LAT"),crs=4269)%>%
+#   st_intersection(.,study_extent)%>%
+#   subset(.,Outer_Symbol == "V"|Outer_Symbol=="RLB"|Outer_Symbol=="R"|Outer_Symbol=="+B"|Outer_Symbol=="++G"|Outer_Symbol=="RG"|Outer_Symbol=="+V"|Outer_Symbol=="L"|Outer_Symbol=="+RLB"|Outer_Symbol=="CB"|Outer_Symbol=="+L"|Outer_Symbol=="+LB"|Outer_Symbol=="LGB"|Outer_Symbol=="C"|Outer_Symbol=="CL"|Outer_Symbol=="+R"|Outer_Symbol=="+CL"|Outer_Symbol=="CGB"|Outer_Symbol=="RLG"|Outer_Symbol=="GB"|Outer_Symbol=="VL"|Outer_Symbol=="GLB"|Outer_Symbol=="+GLB"|Outer_Symbol=="BB"|Outer_Symbol=="+LG"|Outer_Symbol=="+RGB"|Outer_Symbol=="CLB"|Outer_Symbol=="c"|Outer_Symbol=="r"|Outer_Symbol=="cB"|Outer_Symbol=="+r"|Outer_Symbol=="rB"|Outer_Symbol=="+VL"|Outer_Symbol=="CG"|Outer_Symbol=="+CG"|Outer_Symbol=="RC"|Outer_Symbol=="LB "|Outer_Symbol=="rGB"|Outer_Symbol== "RB COM"|Outer_Symbol== "R COMP"|Outer_Symbol== "R INC")%>%
+#   subset(.,!is.na(Site_Number))
+
+
+# # unique dendro locations
+# dendro <- st_read("./OUTPUT/spatial_outputs/dendro_data.shp")%>%
+#   select(c("St_Nmbr","Site_Nm"))%>%
+#   unique()
+# 
+# st_write(dendro,"./OUTPUT/spatial_outputs/dendro_data_unique_loc.shp")
+
+# 
+# for(i in 1:4){
+#   df<-read.csv(paste("./OUTPUT/summaries/dendro/dendro_",i,".csv",sep=""))
+#   name<-paste("dendro_",i,sep="")
+#   assign(name,df)
+# }
+# 
+# dendro_df <- rbind(dendro_1,dendro_2,dendro_3,dendro_4)%>%
+#   select(-c("X"))
+# 
+# write.csv(dendro_df,"./OUTPUT/summaries/dendro/dendro_total.csv")
+
+
+
+
+
+### pair counts with climate data
+dendro_df <- read.csv("./OUTPUT/summaries/dendro/dendro_total.csv")%>%
+  select(-c("X"))
+  
+dendro <- st_read("./OUTPUT/spatial_outputs/dendro_data.shp")%>%
+  as.data.frame()%>%
+  select(c("St_Nmbr","Ot_D_AD"))%>%
+  set_colnames(c("site_name","Year"))
+
+dendro_counts <- st_read("./OUTPUT/spatial_outputs/dendro_data.shp")%>%
+  as.data.frame()%>%
+  select(c("St_Nmbr","Ot_D_AD"))%>%
+  count(Ot_D_AD)%>%
+  set_colnames(c("Year","Count"))
+
+
+
+
+
+
+
+
+
+
+## build as complete of a time series as possible while minimizing interpolation
+## for thirteenth century 
+dendro_total <- merge(dendro,dendro_df,by=c("site_name","Year"))%>%
+  merge(.,dendro_counts,by=c("Year"))%>%
+  group_by(Year)%>%
+  reframe(Count=mean(Count),
+          outlying_precip_var = top_ten(abs(mean_precip_v1)),
+          mean_precip_var = mean(abs(mean_precip_v1)),
+          outlying_precip = bottom_ten(mean_precip),
+          mean_precip = mean(mean_precip))%>%
+  filter(., Year >= 1033 & Year <= 1335)%>%
+  complete(Year = 1033:1335)%>%
+  mutate(interpolated = ifelse(is.na(Count),1,0),
+         count_raw = Count,
+         Count = zoo::na.approx(Count),
+         outlying_precip_var = zoo::na.approx(outlying_precip_var),
+         mean_precip_var = zoo::na.approx(mean_precip_var),
+         outlying_precip = zoo::na.approx(outlying_precip),
+         mean_precip = zoo::na.approx(mean_precip))
+  # mutate(Count = stand(Count),
+  #        outlying_precip_var = stand(outlying_precip_var),
+  #        mean_precip_var = stand(mean_precip_var),
+  #        outlying_precip = stand(outlying_precip),
+  #        mean_precip = stand(mean_precip))
+
+
+
+write.csv(dendro_total,"./DATA/GITHUB DATA/dendrochronological_reconstruction.csv")
+
+png('./FIGURES/For publication/Figure_6.png',height=7000,width=14000,res=600)
+ggplot()+
+  geom_line(data=dendro_total,aes(Year,Count,group=1,color=as.factor(interpolated)),linewidth=2)+
+  scale_color_manual(values=c("#cfe1b9","#EE8959"))+
+  labs(title="Number of Tree Ring cutting Dates by year",
+       x="Year",
+       y="Number of Cutting Dates",
+       subtitle="orange line represents interpolated values",
+  )+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        plot.title = element_text(family="fss",size=175,margin=margin(t=10,b=3)),
+        axis.text = element_text(family = "fsr",size=120),
+        axis.title.y = element_text(family="fss",size=150,margin=margin(r=20)),
+        axis.title.x = element_text(family="fss",size=150,margin=margin(t=20)),
+        plot.margin = margin(10,10,10,10),
+        strip.text.x = element_text(family="fss",size=130,margin=margin(b=10,t=10)),
+        legend.position = "none",
+        plot.subtitle = element_text(family="fsr",size=125,margin=margin(t=5,b=3,r=100)))
+dev.off()
+
+
+
+
+dendro_total1 <- dendro_total
+
+top_vals <- seq(0.01,0.99,by=0.01)
+bot_vals <- seq(0.01,0.99,by=0.01)
+i <- 90
+
+for(i in 1:99){
+  
+  top_val <- top_vals[i]
+  bot_val <- bot_vals[i]
+  
+  top <- function(data){
+    if(length(data)<5){
+      max <- NA
+    }else{
+      max <- quantile(data, probs=top_val, na.rm=TRUE)
+    }
+    return(max)
+  }
+  
+  bottom <- function(data){
+    if(length(data)<5){
+      min <- NA
+    }else{
+      min <- quantile(data, probs=bot_val, na.rm=TRUE)
+    }
+    return(min)
+  }
+  
+  
+  dendro_total <- merge(dendro,dendro_df,by=c("site_name","Year"))%>%
+    merge(.,dendro_counts,by=c("Year"))%>%
+    group_by(Year)%>%
+    reframe(Count=mean(Count),
+            p1 = bottom(mean_precip),
+            v1 = top(abs(mean_precip_v1)),
+            v2 = top(abs(mean_precip_v2)),
+            v3 = top(abs(mean_precip_v3)),
+            v4 = top(abs(mean_precip_v4)),
+            v5 = top(abs(mean_precip_v5)),
+            v6 = top(abs(mean_precip_v6)),
+            v7 = top(abs(mean_precip_v7)),
+            v8 = top(abs(mean_precip_v8)),
+            v9 = top(abs(mean_precip_v9)),
+            v10 = top(abs(mean_precip_v10)),
+            v11 = top(abs(mean_precip_v11)),
+            v12 = top(abs(mean_precip_v12)),
+            v13 = top(abs(mean_precip_v13)),
+            v14 = top(abs(mean_precip_v14)),
+            v15 = top(abs(mean_precip_v15)),
+            v16 = top(abs(mean_precip_v16)),
+            v17 = top(abs(mean_precip_v17)),
+            v18 = top(abs(mean_precip_v18)),
+            v19 = top(abs(mean_precip_v19)),
+            v20 = top(abs(mean_precip_v20)),
+            v21 = top(abs(mean_precip_v21)),
+            v22 = top(abs(mean_precip_v22)),
+            v23 = top(abs(mean_precip_v23)),
+            v24 = top(abs(mean_precip_v24)),
+            v25 = top(abs(mean_precip_v25)))%>%
+    filter(., Year >= 1033 & Year <= 1335)%>%
+    complete(Year = 1033:1335)%>%
+    mutate(interpolated = ifelse(is.na(Count),1,0),
+           count_raw = Count,
+           Count = zoo::na.approx(Count),
+           p1 = zoo::na.approx(p1),
+           v1 = zoo::na.approx(v1),
+           v2 = zoo::na.approx(v2),
+           v3 = zoo::na.approx(v3),
+           v4 = zoo::na.approx(v4),
+           v5 = zoo::na.approx(v5),
+           v6 = zoo::na.approx(v6),
+           v7 = zoo::na.approx(v7),
+           v8 = zoo::na.approx(v8),
+           v9 = zoo::na.approx(v9),
+           v10 = zoo::na.approx(v10),
+           v11 = zoo::na.approx(v11),
+           v12 = zoo::na.approx(v12),
+           v13 = zoo::na.approx(v13),
+           v14 = zoo::na.approx(v14),
+           v15 = zoo::na.approx(v15),
+           v16 = zoo::na.approx(v16),
+           v17 = zoo::na.approx(v17),
+           v18 = zoo::na.approx(v18),
+           v19 = zoo::na.approx(v19),
+           v20 = zoo::na.approx(v20),
+           v21 = zoo::na.approx(v21),
+           v22 = zoo::na.approx(v22),
+           v23 = zoo::na.approx(v23),
+           v24 = zoo::na.approx(v24),
+           v25 = zoo::na.approx(v25))
+  
+   if(i==1){
+    gc_results <- data.frame(year_lag = 1:25,
+                          p1 = NA,
+                          v1 = NA,v2 = NA,v3 = NA,v4 = NA,v5 = NA,
+                          v6 = NA,v7 = NA,v8 = NA,v9 = NA,v10 = NA,
+                          v11 = NA,v12 = NA,v13 = NA,v14 = NA,v15 = NA,
+                          v16 = NA,v17 = NA,v18 = NA,v19 = NA,v20 = NA,
+                          v21 = NA,v22 = NA,v23 = NA,v24 = NA,v25 = NA)
+    
+    for(j in 1:25){
+      p1_c<-grangertest(Count ~ p1, order = j, data = dendro_total)
+      v1_c<-grangertest(Count ~ v1, order = j, data = dendro_total)
+      v2_c<-grangertest(Count ~ v2, order = j, data = dendro_total)
+      v3_c<-grangertest(Count ~ v3, order = j, data = dendro_total)
+      v4_c<-grangertest(Count ~ v4, order = j, data = dendro_total)
+      v5_c<-grangertest(Count ~ v5, order = j, data = dendro_total)
+      v6_c<-grangertest(Count ~ v6, order = j, data = dendro_total)
+      v7_c<-grangertest(Count ~ v7, order = j, data = dendro_total)
+      v8_c<-grangertest(Count ~ v8, order = j, data = dendro_total)
+      v9_c<-grangertest(Count ~ v9, order = j, data = dendro_total)
+      v10_c<-grangertest(Count ~ v10, order = j, data = dendro_total)
+      v11_c<-grangertest(Count ~ v11, order = j, data = dendro_total)
+      v12_c<-grangertest(Count ~ v12, order = j, data = dendro_total)
+      v13_c<-grangertest(Count ~ v13, order = j, data = dendro_total)
+      v14_c<-grangertest(Count ~ v14, order = j, data = dendro_total)
+      v15_c<-grangertest(Count ~ v15, order = j, data = dendro_total)
+      v16_c<-grangertest(Count ~ v16, order = j, data = dendro_total)
+      v17_c<-grangertest(Count ~ v17, order = j, data = dendro_total)
+      v18_c<-grangertest(Count ~ v18, order = j, data = dendro_total)
+      v19_c<-grangertest(Count ~ v19, order = j, data = dendro_total)
+      v20_c<-grangertest(Count ~ v10, order = j, data = dendro_total)
+      v21_c<-grangertest(Count ~ v21, order = j, data = dendro_total)
+      v22_c<-grangertest(Count ~ v22, order = j, data = dendro_total)
+      v23_c<-grangertest(Count ~ v23, order = j, data = dendro_total)
+      v24_c<-grangertest(Count ~ v24, order = j, data = dendro_total)
+      v25_c<-grangertest(Count ~ v25, order = j, data = dendro_total)
+      
+      gc_results[j,c("p1")] <- p1_c$`Pr(>F)`[2]
+      gc_results[j,c("v1")] <- v1_c$`Pr(>F)`[2]
+      gc_results[j,c("v2")] <- v2_c$`Pr(>F)`[2]
+      gc_results[j,c("v3")] <- v3_c$`Pr(>F)`[2]
+      gc_results[j,c("v4")] <- v4_c$`Pr(>F)`[2]
+      gc_results[j,c("v5")] <- v5_c$`Pr(>F)`[2]
+      gc_results[j,c("v6")] <- v6_c$`Pr(>F)`[2]
+      gc_results[j,c("v7")] <- v7_c$`Pr(>F)`[2]
+      gc_results[j,c("v8")] <- v8_c$`Pr(>F)`[2]
+      gc_results[j,c("v9")] <- v9_c$`Pr(>F)`[2]
+      gc_results[j,c("v10")] <- v10_c$`Pr(>F)`[2]
+      gc_results[j,c("v11")] <- v11_c$`Pr(>F)`[2]
+      gc_results[j,c("v12")] <- v12_c$`Pr(>F)`[2]
+      gc_results[j,c("v13")] <- v13_c$`Pr(>F)`[2]
+      gc_results[j,c("v14")] <- v14_c$`Pr(>F)`[2]
+      gc_results[j,c("v15")] <- v15_c$`Pr(>F)`[2]
+      gc_results[j,c("v16")] <- v16_c$`Pr(>F)`[2]
+      gc_results[j,c("v17")] <- v17_c$`Pr(>F)`[2]
+      gc_results[j,c("v18")] <- v18_c$`Pr(>F)`[2]
+      gc_results[j,c("v19")] <- v19_c$`Pr(>F)`[2]
+      gc_results[j,c("v20")] <- v20_c$`Pr(>F)`[2]
+      gc_results[j,c("v21")] <- v21_c$`Pr(>F)`[2]
+      gc_results[j,c("v22")] <- v22_c$`Pr(>F)`[2]
+      gc_results[j,c("v23")] <- v23_c$`Pr(>F)`[2]
+      gc_results[j,c("v24")] <- v24_c$`Pr(>F)`[2]
+      gc_results[j,c("v25")] <- v25_c$`Pr(>F)`[2]
+    }
+    gc_results_final<-gc_results%>%
+      mutate(top_value =top_val,
+             bottom_value = bot_val)
+  }else{
+    gc_results <- data.frame(year_lag = 1:25,
+                             p1 = NA,
+                             v1 = NA,v2 = NA,v3 = NA,v4 = NA,v5 = NA,
+                             v6 = NA,v7 = NA,v8 = NA,v9 = NA,v10 = NA,
+                             v11 = NA,v12 = NA,v13 = NA,v14 = NA,v15 = NA,
+                             v16 = NA,v17 = NA,v18 = NA,v19 = NA,v20 = NA,
+                             v21 = NA,v22 = NA,v23 = NA,v24 = NA,v25 = NA)
+    
+    for(j in 1:25){
+      p1_c<-grangertest(Count ~ p1, order = j, data = dendro_total)
+      v1_c<-grangertest(Count ~ v1, order = j, data = dendro_total)
+      v2_c<-grangertest(Count ~ v2, order = j, data = dendro_total)
+      v3_c<-grangertest(Count ~ v3, order = j, data = dendro_total)
+      v4_c<-grangertest(Count ~ v4, order = j, data = dendro_total)
+      v5_c<-grangertest(Count ~ v5, order = j, data = dendro_total)
+      v6_c<-grangertest(Count ~ v6, order = j, data = dendro_total)
+      v7_c<-grangertest(Count ~ v7, order = j, data = dendro_total)
+      v8_c<-grangertest(Count ~ v8, order = j, data = dendro_total)
+      v9_c<-grangertest(Count ~ v9, order = j, data = dendro_total)
+      v10_c<-grangertest(Count ~ v10, order = j, data = dendro_total)
+      v11_c<-grangertest(Count ~ v11, order = j, data = dendro_total)
+      v12_c<-grangertest(Count ~ v12, order = j, data = dendro_total)
+      v13_c<-grangertest(Count ~ v13, order = j, data = dendro_total)
+      v14_c<-grangertest(Count ~ v14, order = j, data = dendro_total)
+      v15_c<-grangertest(Count ~ v15, order = j, data = dendro_total)
+      v16_c<-grangertest(Count ~ v16, order = j, data = dendro_total)
+      v17_c<-grangertest(Count ~ v17, order = j, data = dendro_total)
+      v18_c<-grangertest(Count ~ v18, order = j, data = dendro_total)
+      v19_c<-grangertest(Count ~ v19, order = j, data = dendro_total)
+      v20_c<-grangertest(Count ~ v10, order = j, data = dendro_total)
+      v21_c<-grangertest(Count ~ v21, order = j, data = dendro_total)
+      v22_c<-grangertest(Count ~ v22, order = j, data = dendro_total)
+      v23_c<-grangertest(Count ~ v23, order = j, data = dendro_total)
+      v24_c<-grangertest(Count ~ v24, order = j, data = dendro_total)
+      v25_c<-grangertest(Count ~ v25, order = j, data = dendro_total)
+      
+      gc_results[j,c("p1")] <- p1_c$`Pr(>F)`[2]
+      gc_results[j,c("v1")] <- v1_c$`Pr(>F)`[2]
+      gc_results[j,c("v2")] <- v2_c$`Pr(>F)`[2]
+      gc_results[j,c("v3")] <- v3_c$`Pr(>F)`[2]
+      gc_results[j,c("v4")] <- v4_c$`Pr(>F)`[2]
+      gc_results[j,c("v5")] <- v5_c$`Pr(>F)`[2]
+      gc_results[j,c("v6")] <- v6_c$`Pr(>F)`[2]
+      gc_results[j,c("v7")] <- v7_c$`Pr(>F)`[2]
+      gc_results[j,c("v8")] <- v8_c$`Pr(>F)`[2]
+      gc_results[j,c("v9")] <- v9_c$`Pr(>F)`[2]
+      gc_results[j,c("v10")] <- v10_c$`Pr(>F)`[2]
+      gc_results[j,c("v11")] <- v11_c$`Pr(>F)`[2]
+      gc_results[j,c("v12")] <- v12_c$`Pr(>F)`[2]
+      gc_results[j,c("v13")] <- v13_c$`Pr(>F)`[2]
+      gc_results[j,c("v14")] <- v14_c$`Pr(>F)`[2]
+      gc_results[j,c("v15")] <- v15_c$`Pr(>F)`[2]
+      gc_results[j,c("v16")] <- v16_c$`Pr(>F)`[2]
+      gc_results[j,c("v17")] <- v17_c$`Pr(>F)`[2]
+      gc_results[j,c("v18")] <- v18_c$`Pr(>F)`[2]
+      gc_results[j,c("v19")] <- v19_c$`Pr(>F)`[2]
+      gc_results[j,c("v20")] <- v20_c$`Pr(>F)`[2]
+      gc_results[j,c("v21")] <- v21_c$`Pr(>F)`[2]
+      gc_results[j,c("v22")] <- v22_c$`Pr(>F)`[2]
+      gc_results[j,c("v23")] <- v23_c$`Pr(>F)`[2]
+      gc_results[j,c("v24")] <- v24_c$`Pr(>F)`[2]
+      gc_results[j,c("v25")] <- v25_c$`Pr(>F)`[2]
+    }
+    gc_results<-gc_results%>%
+      mutate(top_value =top_val,
+             bottom_value = bot_val)
+    
+    gc_results_final <- rbind(gc_results,gc_results_final)
+  }
+}
+
+
+
+
+
+
+
+gc_results_plot_1<-gc_results_final%>%
+  select(c("p1","year_lag","bottom_value"))%>%
+  mutate(grouping = paste("p1",bottom_value))
+
+
+gc_results_significant_predicition <- subset(gc_results_plot_1,p1<=0.05)
+
+
+
+gc_results_plot_2<-gc_results_final%>%
+  gather(variable,value,-c("year_lag","top_value","bottom_value"))%>%
+  filter(!variable =="p1")%>%
+  select(-c("bottom_value"))%>%
+  mutate(grouping = paste(variable,top_value))%>%
+  mutate(lag_year = substring(variable,2),
+         lag_year_title = ifelse(lag_year==1,paste(lag_year,"Year"),paste(lag_year,"Years")))
+
+
+gc_results_plot_2$lag_year_title <- factor(gc_results_plot_2$lag_year_title,levels=c("1 Year","2 Years","3 Years","4 Years","5 Years",
+                                                                              "6 Years","7 Years","8 Years","9 Years","10 Years",
+                                                                              "11 Years","12 Years","13 Years","14 Years","15 Years",
+                                                                              "16 Years","17 Years","18 Years","19 Years","20 Years",
+                                                                              "21 Years","22 Years","23 Years","24 Years","25 Years"))
+
+
+# 
+# png('./FIGURES/For publication/Supplemental_GC_2.png',height=7000,width=12000,res=600)
+# ggplot()+
+#   geom_line(data=gc_results_plot_1,aes(year_lag,p1,group=grouping,col=bottom_value))+
+#   scale_color_gradient(name="Percentile",low="#cfe1b9",high="#1b4332")+
+#   geom_hline(yintercept = 0.05,col="black",linetype="dashed")+
+#   labs(x="Year Lag in Causality",
+#        y="Granger Causality Score")+
+#   theme_minimal()+
+#   theme(panel.grid.minor = element_blank(),
+#       panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+#       plot.title = element_text(family="fss",size=150,margin=margin(b=10)),
+#       axis.text = element_text(family = "fsr",size=120),
+#       axis.title.y = element_text(family="fss",size=150,margin=margin(r=20)),
+#       axis.title.x = element_text(family="fss",size=150,margin=margin(t=20)),
+#       plot.margin = margin(10,10,10,10),
+#       legend.title=element_text(family="fss",size=150),
+#       legend.text = element_text(family = "fsr",size=120),
+#       strip.text.x = element_text(family="fss",size=130,margin=margin(b=10,t=10)))
+# dev.off()
+
+
+gc_results_plot_3 <- subset(gc_results_plot_1,grouping == "p1 0.1")
+
+
+gc_results_plot_4 <- subset(gc_results_plot_2,lag_year_title=="1 Year"|lag_year_title=="5 Years"|
+                              lag_year_title=="10 Years"|
+                              lag_year_title=="15 Years"|
+                              lag_year_title=="20 Years")
+
+
+
+write.csv(gc_results_plot_3,"./DATA/GITHUB DATA/granger_causality_aridity.csv")
+write.csv(gc_results_plot_4,"./DATA/GITHUB DATA/granger_causality_variability.csv")
+
+p1<-ggplot()+
+  geom_line(data=gc_results_plot_4,aes(year_lag,value,group=grouping,col=top_value))+
+  geom_line(data=gc_results_plot_3,aes(year_lag,p1),col="white",size=1.25)+
+  geom_line(data=gc_results_plot_3,aes(year_lag,p1),col="#EE8959",size=1.05,linetype="twodash")+
+  scale_color_gradient(name="Percentile",low="#cfe1b9",high="#1b4332")+
+  facet_wrap(~lag_year_title,nrow=5)+
+  labs(title="Variability measured by changes in each year and n year(s) previous",
+       x="Year Lag in Causality",
+       y="Granger Causality Score",
+       subtitle="Dashed orange line represents causality between extreme aridity and tree cutting activity",
+  )+
+  force_panelsizes(rows=c(3,1,1,1,1))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        plot.title = element_text(family="fss",size=175,margin=margin(t=10,b=3)),
+        axis.text = element_text(family = "fsr",size=120),
+        axis.title.y = element_text(family="fss",size=150,margin=margin(r=20)),
+        axis.title.x = element_text(family="fss",size=150,margin=margin(t=20)),
+        plot.margin = margin(10,10,10,10),
+        legend.title=element_text(family="fss",size=150),
+        legend.text = element_text(family = "fsr",size=120),
+        strip.text.x = element_text(family="fss",size=130,margin=margin(b=10,t=10)),
+        legend.key.size = unit(2, 'cm'),
+        plot.subtitle = element_text(family="fsr",size=125,margin=margin(t=5,b=3,r=100)))
+
+
+
+png('./FIGURES/For publication/Figure_7.png',height=17000,width=12000,res=600)
+p1
+dev.off()
+
 ```
