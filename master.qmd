@@ -25,7 +25,7 @@ knitr::opts_knit$set(root.dir = "C:/Users/sfield3/OneDrive - University of Wyomi
 
 ```{r}
 #| echo: false
-packages <-c('terra','sf','ggplot2','tidyterra','dplyr','tidyr','gifski','gganimate','ggforce','ggpubr','scales','lmtest','tseries')
+packages <-c('terra','sf','ggplot2','tidyterra','dplyr','tidyr','gifski','gganimate','ggforce','ggpubr','scales','lmtest','tseries','FedData')
 
 for(p in packages) if(p %in% rownames(installed.packages()) == F) { install.packages(p) }
 for(p in packages) suppressPackageStartupMessages(library(p,quietly=T,character.only=T))
@@ -33,110 +33,89 @@ for(p in packages) suppressPackageStartupMessages(library(p,quietly=T,character.
 theme_set(theme_bw())
 ```
 
-### 1.1 Establish Unique Functions
+## 2.0 Import Study Area Extent and Paleoclimate Raster
 
-1.  `find_years_until_disoccupation` - this function is designed to identify an occupation end date and build a time series counting down until disoccupation. b
+`study_area`: The study area is derived as the latitude and longitude of extent of sites used in the study (see Section 3.0). This extent can be downloaded as a shapefile at: **INSERT GITHUB LINK**
 
-```{r}
-#| echo: false
-find_years_until_disoccupation <- function(x) {
-  n <- length(x)
-  out <- integer(n)
-  counter <- 0
-  for (i in seq(n, 1)) {
-    if (x[i] == 0) {
-      counter <- 0
-    } else {
-      counter <- counter + 1
-    }
-    out[i] <- counter
-  }
-  out
-}
-```
-
-## 2.0 Study Area and Paleoclimate Raster
-
-Study area derived as extent of sites used in study.
-
-Variability raster downloaded from....
+`four_corners`: Shapefiles for the four corners states are used for plotting of supplemental figures later on.
 
 ```{r}
 #| echo: false
 study_extent <- st_read("./DATA/study_extent.shp")%>%
-  st_transform(.,crs=4269)
+  st_transform(.,crs=4326)
 
 four_corners <- st_read("C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/DATA_GENERAL/SPATIAL/NORTH_AMERICA_REGIONS/SOUTHWEST/STATE_BOUNDARIES/four_corners_states.shp")%>%
-  st_transform(.,crs=4269)%>%
+  st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
-
 ```
+
+`paleoclimate_raster`: The paleoclimate raster is from PaleoCAR (Bocinsky et al. 2016). These data can be accessed two ways
+
+1.  Access archives directly as NetCDF files as part of the NOAA National Centers for Environmental Information Paleoclimate archive at: [DOI](https://doi.org/10.25921/8ctk-8v26).
+2.  Access via SKOPE (associated github repository [here](https://github.com/bocinsky/paleocar_v2)). The scripts in this repository download the archived tiles, mosaic and write them as cloud-optimized GeoTIFFs, then uploads them to an [Amazon AWS S3 bucket](https://skope.s3.us-west-2.amazonaws.com/index.html), allowing them to queried remotely. The approach detailed below is adopted from <https://github.com/bocinsky/paleocar_v2>.
+    1.  **Note:** accessing via SKOPE requires transforming to WGS 84 CRS (EPSG:4326)
+
+Both options are provided below:
 
 ```{r}
 #| echo: false
+# OPTION 1: 
 # r <- terra::rast("./DATA/CLIMATE/PPT.tif")
-# 
-# # calculate year-to-year variability and export
-# r_var <- (subset(r, 1:(nlyr(r)-1)) - subset(r, 2:nlyr(r))) * -1
-# 
-# writeRaster(r_var,"./DATA/CLIMATE/PPT_annualvariability.tif")
+
+# OPTION 2:
+study_extent <- study_extent%>%
+  st_transform(.,4326)
+
+r <- terra::rast("https://skope.s3.us-west-2.amazonaws.com/paleocar_v2/ppt_wateryear/prediction_scaled.tif", vsi = TRUE) %>%
+  terra::subset(subset = 600:1351) %>%
+  terra::crop(terra::vect(study_extent),mask = TRUE)
+
+# check projection and reproject if necessary
+# crs(r)
+# r<-project(r,"epsg:4326")
+
+# OPTIONAL: write raster to local
+writeRaster(r,"./DATA/CLIMATE/PPT_600_1351.tif")
 ```
 
-After variability assessment is computed/exported, read in directly.
+### 2.1 Calculate Base Variability Raster
+
+Calculate year-to-year change as a measure of temporal variability. This process calculates the difference from every year (2-2000 C.E.) and the previous year (1-1999 C.E.) for each cell.
 
 ```{r}
 #| echo: false
-r <- terra::rast("./DATA/CLIMATE/PPT.tif")
-r_var <- terra::rast("./DATA/CLIMATE/PPT_annualvariability.tif")
+r_var <- subset(r, 2:nlyr(r)) - subset(r, 1:(nlyr(r)-1))
+
+writeRaster(r_var,"./DATA/CLIMATE/PPT_annualvariability_600_1351.tif")
 ```
 
-### 2.1 Plotting Variability Raster
-
-```{r}
-#| echo: false
-
-r_var1 <- r_var[[600:1300]]
-
-df <- as.data.frame(r_var1,xy=T)%>%
-  pivot_longer(cols = -c(x, y), names_to = "layer",values_to = "value")%>%
-  mutate(layer_num = as.numeric(gsub("PPT_", "", layer)))
-
-p <- ggplot() +
-  geom_raster(data=df, aes(x = x, y = y, fill = value)) +
-  scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0),
-name = "Precipitation 
-Variability (mm)")+
-  geom_sf(data=study_extent,col="grey20",fill=NA)+
-  geom_sf(data=four_corners,col="grey70",fill=NA,linetype="dotted")+
-  #coord_equal() +
-  labs(title = "Year (CE): {frame_time}",
-       x=NULL,
-       y=NULL) +
-  transition_time(layer_num) +
-  ease_aes("linear")+
-  theme_minimal()
-
-animate(p, fps = 5,nframes = 701, width = 750, height = 600)
-
-anim_save("./FIGURES/raster_precip_variability_600to1300.gif")
-
-rm(r_var1)
-```
-
-## 3.0 Chaco Great Houses
-
-Accessed from Van Dyke and Heitman (2016) and Chaco Research Archive:
-
-1.  `chaco_greathouses`: this is the geodatabase of Chaco greathouses, collected by... **Note:** These data are not publicly available.
-2.  `outlier_database`: this is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive. Click [here](https://www.chacoarchive.org/cra/outlier-database/) to access.
-
-### 3.1 Import data
+**NOTE:** After variability assessment is computed/exported, you can read in directly to avoid re-running.
 
 ```{r}
 #| echo: false
 
+# optional 
+# r <- terra::rast("./DATA/CLIMATE/PPT_600_1351.tif")
+# r_var <- terra::rast("./DATA/CLIMATE/PPT_annualvariability_600_1351.tif")
+```
+
+## 3.0 Import Site Data
+
+### 3.1 Chaco Great Houses Site Data
+
+Settlement data of Chaco Great House communities comes from two sources:
+
+1.  `chaco_greathouses`: This is the *Greater Chaco Landscapes Great House Communities Integration Dataset*. **Note:** A version of these data were published by Van Dyke et al. (2016, [DOI](https://doi.org/10.7183/0002-7316.81.2.205)), with access requested [here](https://doi.org/10.6067/XCV8BV7JJ4). The database contains 365 sites, including:
+    1.  15 great houses in the Chaco Core, 243 great house outliers, 11 herraduras, 46 shrines, 21 stone circles, 9 crescents, and 20 important landforms.
+    2.  The full citation for the database is: Heitman, Carrie C., Ruth Van Dyke, Matthew Peebles, and Kyle Boczinsky. 2016. Greater Chaco Landscapes Great House Communities GIS Integration Dataset. GIS dataset submitted to the National Park Service in partial fulfillment of Rocky Mountain Cooperative Ecosystems Study Unit Task Agreement Number: P14AC01703, Project #: UCOB-109.
+2.  `outlier_database`: This is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive. Access [here](https://www.chacoarchive.org/cra/outlier-database/).
+
+The geodatabase `chaco_greathouses` and the attribute `outlier_database` are merged to reconstruct occupation at 105 Chaco great house outliers. These data are stored under as the object `gh`.
+
+```{r}
+#| echo: false
 chaco_greathouses <- st_read("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/VanDykeEtAl2015_WGS84.shp")%>%
-  st_transform(.,crs=4269)%>%
+  st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
 
 outlier_database <-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/OutlierAttributes_Public_CRA.csv")%>%
@@ -158,24 +137,259 @@ gh <- merge(chaco_greathouses,outlier_database,by="SITE_NA")%>%
 rm(chaco_greathouses,outlier_database)
 ```
 
-### 3.2 Synthesize climate data
+### 3.2 VEP II North Study Area Site Data
 
-**NOTE:** in most places all of the change is either negative or positive, so usually absolute change is the additive inverse. However, in some places where some cells change positively and some negatively, the absolute change is different.
+Settlement data from the Village Ecodynamics Project (VEP) II north study area come from Schwindt et al. (2016: [DOI](http://doi.org/10.7183/0002-7316.81.1.74)), which includes additions to an earlier (VEP I) database (Ortman et al. 2007: [DOI](https://doi.org/10.2307/40035813)). The database used in this study is a limited version of the VEP II north database, which before filtering and subsetting contains 9286 site records. The data was subset to include only record site types with characteristics common to residential sites.
 
-#### 3.2.1 Measures of Climate Stress
-
-This analysis is used to tabulate several measures:
-
-1.  `mean_precipitation` - this is the mean annual precipitation within each catchment.
-    1.  This measure is used to test the assumption that years with lower mean precipitation (e.g., the most arid years) are good predictors of social stress.
-2.  `std_precipitation` - this is the annual standard deviation within each catchment.
-    1.  This measure is used to test the assumption that years with more variable precipitation (e.g., years when catchment is most varied) are good predictors of social stress.
-3.  `mean_precipitation_change` - this is the mean year-to-year precipitation variability within each catchment.
-    1.  This measure is used to test the assumption that instances of greater negative year-to-year change (e.g., the most unexpectedly arid years) are good predictors of social stress.
-4.  `std_precipitation_change` - this is the standard deviation year-to-year precipitation variability within each catchment.
-    1.  This measure is used to test the assumption that instances of greater change (regardless of direction) are good predictors of social stress.
+To aid in later stages creating a complete occupation time series for all sites in the VEP database (see section 5.1.2), the date ranges for each occupational phase are imported.
 
 ```{r}
+#| echo: false
+vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
+  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
+  subset(N.roomblocks >= 1)%>%
+  subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
+  #subset(Dataquality != 3)%>%
+  st_as_sf(.,coords=c("UTMEast","UTMNorth"),crs=26912)%>%
+  st_transform(.,crs=4326)%>%
+  st_intersection(.,study_extent)%>%
+  mutate(UNIQ_ID = 1:nrow(.))
+
+vep_dates <- read.csv("./DATA/VEP_dates.csv")
+```
+
+## 4.0 Calculate Climate Conditions
+
+In this study, five climate measures are assessed, which can are divided into three primary classes:
+
+1.  Precipitation availability:
+    1.  `mean_precipitation` - this is the mean annual precipitation within each catchment.
+2.  Directional change:
+    1.  `temporal_variability` - this is the mean year-to-year precipitation variability within each catchment.
+    2.  `5_yr_zscore` - this measure follows McCool et al. (2025: [DOI](https://doi.org/10.1017/aaq.2025.10107)) and measures "...whether the precipitation during any given year is higher or lower than the prior five-year average and what the magnitude of that change is" (pg. 107). This is done by finding the difference between the mean annual precipitation each year and the average for the previous five years and dividing it by the standard deviation of annual precipitation for the previous five years.
+3.  Absolute change:
+    1.  `spatial_variability` - this is the annual standard deviation within each catchment.
+
+    2.  `spatiotemporal_variability` - this is the standard deviation year-to-year precipitation variability within each catchment. **NOTE:** in most places all of the change is either negative or positive, so usually absolute change is the additive inverse. However, in some places where some cells change positively and some negatively, the absolute change is different.
+
+To calculate the above measures of precipitation availability and change for each site, the following steps were used:
+
+1.  Select a site, apply a geospatial buffer by 2 km to identify approximate local catchment, and catalog site name or ID
+2.  Extract the raster data for the buffered area (both annual precipitation and year-to-year precipitation change raster)
+3.  Summarize the five climate measures from the associated raster extractions and combine for easier interpretation later.
+
+### 4.1 Demonstrate climate measure calculations
+
+Below is a visual demonstration of the analysis, to aid in understanding the processing steps used to delineate the local catchment for each site and summarize the
+
+```{r}
+#| echo: false
+
+# this is a site location from a publicly accessible site in Mesa Verde National Park
+site <- data.frame(site_name = "public_site",
+                   latitude = 37.24,
+                   longitude = -108.50)%>%
+  st_as_sf(coords=c("longitude","latitude"),crs=4326)
+
+### 1. Select a site and apply buffer
+site_buff <- site[1,]%>%
+    st_buffer(.,2000)%>%
+    st_transform(.,crs=4326)
+
+site_name <- site[1,c("site_name")]%>%
+              st_drop_geometry()%>%
+              as.character()
+
+### 2. Crop or extract raster data from within buffer extent
+# NOTE: In this example raster data is cropped to more easily visualize. However, during the full processing, the data is extracted and transformed into a dataframe immediately
+site_precip <- crop(r,site_buff)
+site_var <- crop(r_var,site_buff) 
+
+
+### 3: Summarize the associated metrics.
+site_precip_df <- terra::extract(r,site_buff,exact=T)
+site_var_df <- terra::extract(r_var,site_buff,exact=T)
+
+mean_precipitation <- site_precip_df%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=600:1351)%>%
+    setNames(c("mean_precipitation","year"))
+  
+  spatial_variability <- site_precip_df%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=600:1351)%>%
+    setNames(c("spatial_variability","year"))
+  
+  temporal_variability <- site_var_df%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(mean,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=601:1351)%>%
+    setNames(c("temporal_variability","year"))
+
+  spatiotemporal_variability <- site_var_df%>%
+    select(-c("ID","fraction"))%>%
+    summarise_all(sd,na.rm=T)%>%
+    t()%>%
+    as.data.frame()%>%
+    mutate(year=601:1351)%>%
+    setNames(c("spatiotemporal_variability","year"))
+  
+  z_scores <- mean_precipitation%>%
+    mutate(five_year_av = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=mean,fill=NA),
+            five_year_sd = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=sd,fill=NA),precip_5yr_zscore = (mean_precipitation-five_year_av)/five_year_sd)%>%
+  select(c("year","precip_5yr_zscore"))
+  
+summary <- merge(mean_precipitation,spatial_variability,by="year")%>%
+  merge(.,temporal_variability,by="year")%>%
+  merge(.,spatiotemporal_variability,by="year")%>%
+  merge(.,z_scores,by="year")%>%
+  gather(.,key="variable",value="value",-year)%>%
+  setNames(c("year","variable",site_name))
+
+```
+
+#### 4.1.1 Demonstrate climate measure calculations
+
+```{r}
+#| echo: false
+
+p1 <- ggplot(site_precip[[451]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1050`))+
+  geom_text(aes(label=round(`1050`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1050",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p2 <- ggplot(site_precip[[452]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1051`))+
+  geom_text(aes(label=round(`1051`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1051",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p3 <- ggplot(site_precip[[453]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1052`))+
+  geom_text(aes(label=round(`1052`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1052",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p4 <- ggplot(site_precip[[454]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1053`))+
+  geom_text(aes(label=round(`1053`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1053",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p5 <- ggplot(site_precip[[455]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1054`))+
+  geom_text(aes(label=round(`1054`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1054",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p6 <- ggplot(site_precip[[456]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1055`))+
+  geom_text(aes(label=round(`1055`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Year 1055",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+png('./FIGURES/Figure_2a.png',height=8000,width=48000,res=1200)
+ggarrange(p1,p2,p3,p4,p5,p6,ncol=6,align="hv")
+dev.off()
+  
+
+
+p1 <- ggplot(site_var[[451]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1051`))+
+  geom_text(aes(label=round(`1051`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Difference between Year 1051 and 1050",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p2 <- ggplot(site_var[[452]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1052`))+
+  geom_text(aes(label=round(`1052`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Difference between Year 1052 and 1051",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p3 <- ggplot(site_var[[453]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1053`))+
+  geom_text(aes(label=round(`1053`)),col="white")+
+  scale_fill_viridis_c(direction= -1,option="magma")+
+  labs(title="Difference between Year 1053 and 1052",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p4 <- ggplot(site_var[[454]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1054`))+
+  geom_text(aes(label=round(`1054`)),col="white")+
+  scale_fill_viridis_c(direction= -1)+
+  labs(title="Difference between Year 1054 and 1053",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p5 <- ggplot(site_var[[455]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1055`))+
+  geom_text(aes(label=round(`1055`)),col="white")+
+  scale_fill_viridis_c(direction= -1,option="magma")+
+  labs(title="Difference between Year 1055 and 1054",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+p6 <- ggplot(site_var[[456]],aes(x=x,y=y))+
+  geom_raster(aes(fill=`1056`))+
+  geom_text(aes(label=round(`1056`)),col="white")+
+  scale_fill_viridis_c(direction= -1,option="magma")+
+  labs(title="Difference between Year 1056 and 1055",
+       x=NULL,
+       y=NULL)+
+  theme(legend.position = "none")
+
+png('./FIGURES/Figure_2b.png',height=8000,width=48000,res=1200)
+ggarrange(p1,p2,p3,p4,p5,p6,ncol=6,align="hv")
+dev.off()
+```
+
+### 4.2 Calculate Climate Measures
+
+These analyses demonstrated above (Section 4.1) are iterated across all sites in the `gh` and `vepii_sites` databases. To account for differences in the structure of the `gh` and `vepii_sites` databases, separate loops are executed for each settlement type.
+
+#### 4.2.1 Calculating Climate Measures at each Chaco Great House
+
+```{r}
+#| echo: false
+
+### ITERATION FOR CHACO GREAT HOUSES 
 for(i in 1:nrow(gh)){
   site <- gh[i,]%>%
     st_buffer(.,2000)%>%
@@ -194,37 +408,43 @@ for(i in 1:nrow(gh)){
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
+    mutate(year=600:1351)%>%
     setNames(c("mean_precipitation","year"))
   
-  std_precipitation <- site_precip%>%
+  spatial_variability <- site_precip%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
-    setNames(c("std_precipitation","year"))
+    mutate(year=600:1351)%>%
+    setNames(c("spatial_variability","year"))
   
-  mean_precipitation_change <- site_var%>%
+  temporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("mean_precipitation_change","year"))
+    mutate(year=601:1351)%>%
+    setNames(c("temporal_variability","year"))
 
-  std_precipitation_change <- site_var%>%
+  spatiotemporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("std_precipitation_change","year"))
+    mutate(year=601:1351)%>%
+    setNames(c("spatiotemporal_variability","year"))
+  
+  z_scores <- mean_precipitation%>%
+    mutate(five_year_av = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=mean,fill=NA),
+            five_year_sd = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=sd,fill=NA),precip_5yr_zscore = (mean_precipitation-five_year_av)/five_year_sd)%>%
+  select(c("year","precip_5yr_zscore"))
 
   
-  summary <- merge(mean_precipitation,std_precipitation,by="year")%>%
-    merge(.,mean_precipitation_change,by="year")%>%
-    merge(.,std_precipitation_change,by="year")%>%
+  summary <- merge(mean_precipitation,spatial_variability,by="year")%>%
+    merge(.,temporal_variability,by="year")%>%
+    merge(.,spatiotemporal_variability,by="year")%>%
+    merge(.,z_scores,by="year")%>%
     gather(.,key="variable",value="value",-year)%>%
     setNames(c("year","variable",site_name))
 
@@ -238,83 +458,19 @@ for(i in 1:nrow(gh)){
 rm(site_precip,
    site_var,
    mean_precipitation,
-   std_precipitation,
-   mean_precipitation_change,
-   std_precipitation_change)
+   spatial_variability,
+   temporal_variability,
+   spatiotemporal_variability)
 
-write.csv(summary_all_greathouses,"./OUTPUT/climatevariability_greathouses.csv")
+write.csv(summary_all_greathouses,"./OUTPUT/climatevariability_greathouses.csv", row.names = FALSE)
 ```
 
-### 3.3 Synthesize occupation timeline
-
-Update occupation timeline to know years until disoccupation for all great houses.
-
-```{r}
-#| echo: false
-gh_occupation_timeseries <- gh %>%
-  rowwise() %>%
-  st_drop_geometry()%>%
-  mutate(year = list(BEGIN_DATE:END_DATE)) %>%
-  unnest(year) %>%
-  select(c("SITE_NA", "year"))%>%
-  group_by(SITE_NA)%>%
-  mutate(year_until = find_years_until_disoccupation(year)-1)%>%
-  setNames(c("ID","year","years_until_disoccupation"))
-
-write.csv(gh_occupation_timeseries,"./OUTPUT/greathouses_occupation_timeseries.csv")
-
-rm(gh)
-```
-
-### 3.4 Compare occupation and climate variables
-
-Results showing that std and change better predictors than how much.
+#### 4.2.2 Calculating Climate Measures at each VEP II North Site
 
 ```{r}
 #| echo: false
 
-summary_all_greathouses <- read.csv("./OUTPUT/climatevariability_greathouses.csv")%>%select(-c("X"))
-gh_occupation_timeseries <- read.csv("./OUTPUT/greathouses_occupation_timeseries.csv")%>%select(-c("X"))
-
-gh_climate_timeseries<-summary_all_greathouses%>%
-  gather(key=ID,value=climate_value,-c("year","variable"))
-
-gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))
-
-# mutate(years_until_dis_bin = cut(years_until_disoccupation, breaks = c(-Inf,20,40,60,80,100,120,140,160,180,200,Inf),labels=c("0-20","21-40","41-60","61-80","81-100","101-120","121-140","141-160","161-180","181-200","201+")))
-
-
-# ggplot(data=gh_combined_timeseries,aes(years_until_dis_bin,climate_value))+
-#   geom_boxplot()+
-#   facet_wrap(~variable,scale="free_y")
-```
-
-## 4.0 VEP II North Study Area Site Data
-
-Accessed from:
-
-### 4.1 Import data
-
-```{r}
-vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
-  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
-  subset(N.roomblocks >= 1)%>%
-  subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
-  #subset(Dataquality != 3)%>%
-  st_as_sf(.,coords=c("UTMEast","UTMNorth"),crs=26912)%>%
-  st_transform(.,crs=4269)%>%
-  st_intersection(.,study_extent)%>%
-  mutate(UNIQ_ID = 1:nrow(.))%>%
-  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
-  subset(N.roomblocks >= 1)
-```
-
-### 4.2 Synthesize climate data
-
-#### 4.2.1 Measures of Climate Stress
-
-```{r}
-
+### ITERATION FOR VEP II NORTH SITES
 for(i in 1:nrow(vepii_sites)){
   site <- vepii_sites[i,]%>%
     st_buffer(.,2000)%>%
@@ -336,37 +492,43 @@ for(i in 1:nrow(vepii_sites)){
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
+    mutate(year=600:1351)%>%
     setNames(c("mean_precipitation","year"))
   
-  std_precipitation <- site_precip%>%
+  spatial_variability <- site_precip%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
-    setNames(c("std_precipitation","year"))
+    mutate(year=600:1351)%>%
+    setNames(c("spatial_variability","year"))
   
-  mean_precipitation_change <- site_var%>%
+  temporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("mean_precipitation_change","year"))
+    mutate(year=601:1351)%>%
+    setNames(c("temporal_variability","year"))
 
-  std_precipitation_change <- site_var%>%
+  spatiotemporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("std_precipitation_change","year"))
+    mutate(year=601:1351)%>%
+    setNames(c("spatiotemporal_variability","year"))
+
+  z_scores <- mean_precipitation%>%
+    mutate(five_year_av = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=mean,fill=NA),
+            five_year_sd = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=sd,fill=NA),precip_5yr_zscore = (mean_precipitation-five_year_av)/five_year_sd)%>%
+  select(c("year","precip_5yr_zscore"))
 
   
-  summary <- merge(mean_precipitation,std_precipitation,by="year")%>%
-    merge(.,mean_precipitation_change,by="year")%>%
-    merge(.,std_precipitation_change,by="year")%>%
+  summary <- merge(mean_precipitation,spatial_variability,by="year")%>%
+    merge(.,temporal_variability,by="year")%>%
+    merge(.,spatiotemporal_variability,by="year")%>%
+    merge(.,z_scores,by="year")%>%
     gather(.,key="variable",value="value",-year)%>%
     setNames(c("year","variable",site_name))
 
@@ -380,139 +542,151 @@ for(i in 1:nrow(vepii_sites)){
 rm(site_precip,
    site_var,
    mean_precipitation,
-   std_precipitation,
-   mean_precipitation_change,
-   std_precipitation_change)
+   spatial_variability,
+   temporal_variability,
+   spatiotemporal_variability)
 
-write.csv(summary_all_vep,"./OUTPUT/climatevariability_vep_habitations.csv")
+write.csv(summary_all_vep,"./OUTPUT/climatevariability_vep_habitations.csv", row.names = FALSE)
 ```
 
-### 4.3 Synthesize occupation timeline
+## 5.0 Integrate Climate and Settlement Data
+
+Climate measures were calculated annually from 600 to 1350 C.E. and tabulated as annual time series. To integrate these climate reconstructiosn and the settlement data, the site databases need to be transformed into time series.
+
+### 5.1 Create Occupation Time Series
+
+Rather than examining the correspondence between periods of climate and social stress, the occupational timelines for all sites were inverted to measure the number of years until resettlement.
+
+#### 5.1.1 Chaco Great House Occupation Time Series
+
+Chaco great houses used in this analysis did not have multi-component occupations, therefore calculating the years before resettlement were estimated easily by counting back from the occupational "END_DATE".
 
 ```{r}
 #| echo: false
-vep_df <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
-  subset(tlkp.Site.Function_DescGen=="Habitation")%>%
-  subset(N.roomblocks >= 1)%>%
-  subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
-  #subset(Dataquality != 3)%>%
+gh_occupation_timeseries <- gh %>%
+  rowwise() %>%
+  st_drop_geometry()%>%
+  mutate(year = list(BEGIN_DATE:END_DATE)) %>%
+  unnest(year)%>%
+  mutate(years_until_resettlement=END_DATE - year)%>%
+  select(c("SITE_NA","year","years_until_resettlement"))%>%
+  setNames(c("ID","year","years_until_resettlement"))
+
+write.csv(gh_occupation_timeseries,"./OUTPUT/greathouses_occupation_timeseries.csv", row.names = FALSE)
+
+```
+
+#### 5.1.2 VEP II Occupation Time Series
+
+Many sites in the `vepii_sites` database were multi-component and thus required separating into their separate components, counting the years before resettlement in each component, and then recombining.
+
+```{r}
+#| echo: false
+vep_occupation_timeseries <- vepii_sites%>%
+  st_drop_geometry()%>%
   select(c("ph6","ph7","ph8","ph9","ph10","ph11","ph12",
-           "ph13","ph14","ph15","ph16","ph17","ph18","ph19"))%>%
-  mutate(UNIQ_ID = 1:nrow(.))%>%
+           "ph13","ph14","ph15","ph16","ph17","ph18","ph19","UNIQ_ID"))%>%
   gather(phase,value,-UNIQ_ID)%>%
-  mutate(value = ifelse(value<0,0,value))
-
-vep_dates <- read.csv("./DATA/VEP_dates.csv")
-
-vep_occupation_timeseries<- left_join(vep_df,vep_dates,c("phase"="PHASE"))%>%
+  mutate(value = ifelse(value<0,0,value))%>%
+  left_join(.,vep_dates,c("phase"="PHASE"))%>%
   arrange(.,desc(UNIQ_ID),BEGIN_D)%>%
   subset(value>0)%>%
   select(-c("phase","value"))%>%
   setNames(c("ID","BEGIN_DATE","END_DATE"))%>%
-  rowwise() %>%
-  st_drop_geometry()%>%
-  mutate(year = list(BEGIN_DATE:END_DATE)) %>%
-  unnest(year) %>%
-  select(c("ID", "year"))%>%
+  arrange(ID,BEGIN_DATE)%>%
   group_by(ID)%>%
-  mutate(year_until = find_years_until_disoccupation(year)-1)%>%
-  setNames(c("ID","year","years_until_disoccupation"))
+  mutate(continuous = BEGIN_DATE==lag(END_DATE)+1,
+         group = cumsum(is.na(continuous)|!continuous))%>%
+  group_by(ID,group)%>%
+  summarise(BEGIN_DATE=min(BEGIN_DATE),
+            END_DATE = max(END_DATE))%>%
+  rowwise() %>%
+  mutate(year = list(BEGIN_DATE:END_DATE))%>%
+  unnest(year)%>%
+  mutate(years_until_resettlement=END_DATE - year)%>%
+  select(c("ID","year","years_until_resettlement"))
 
-write.csv(vep_occupation_timeseries,"./OUTPUT/vep_occupation_timeseries.csv")
-rm(vep_dates,vep_df)
+
+write.csv(vep_occupation_timeseries,"./OUTPUT/vep_occupation_timeseries.csv", row.names = FALSE)
 ```
 
-### 4.4 Combine occupation and climate data
+### 5.2 Merge Climate and Occupational Time Series
+
+#### 5.2.1 Chaco Great House Climate and Occupation
 
 ```{r}
 #| echo: false
+gh_climate_timeseries<-summary_all_greathouses%>%
+  gather(key=ID,value=climate_value,-c("year","variable"))
 
-summary_all_vep <- read.csv("./OUTPUT/climatevariability_vep_habitations.csv")%>%select(-c("X"))
+gh_combined_timeseries <- merge(gh_climate_timeseries,gh_occupation_timeseries,by=c("ID","year"))
+```
 
-vep_occupation_timeseries <- read.csv("./OUTPUT/vep_occupation_timeseries.csv")%>%select(-c("X"))
+#### 5.2.2 VEP II North Climate and Occupation
 
+```{r}
+#| echo: false
 vep_climate_timeseries<-summary_all_vep%>%
   gather(key=ID,value=climate_value,-c("year","variable"))%>%
   mutate(ID=as.numeric(sub("^X","",ID)))
 
 vep_combined_timeseries <- merge(vep_climate_timeseries,vep_occupation_timeseries,by=c("ID","year"))
-
 ```
 
-## 5.0 Combine and analyze
+### 5.3 Merge All Data
 
 ```{r}
 #| echo: false
 master_output <- rbind(gh_combined_timeseries,vep_combined_timeseries)
 
-write.csv(master_output,"./OUTPUT/master_output.csv")
+# OPTIONAL: write output to enable importing later without re-running analysis
+
+# write.csv(master_output,"./OUTPUT/master_output.csv", row.names = FALSE)
+# master_output <- read.csv("./OUTPUT/master_output.csv")
 ```
 
-### 5.1 Broad correlations
+## 6.0 Analyze Settlement Results
 
-Calculate correlations in these metrics.
+### 6.1 Plot all results
 
 ```{r}
 #| echo: false
-master_output <- read.csv("./OUTPUT/master_output.csv")%>%
-  select(-c("X"))
-
-# mean(master_output$years_until_disoccupation)
-# sd(master_output$years_until_disoccupation)
-```
-
-```{r}
-#| echo: false
-# head_ID <- master_output%>%
-#   distinct(ID)%>%
-#   slice_head(n=2)%>%
-#   pull(ID)
-# 
-# tail_ID <- master_output%>%
-#   distinct(ID)%>%
-#   slice_tail(n=2)%>%
-#   pull(ID)
-# 
-# ID_list <- c(head_ID,tail_ID)
-# 
-# master_sub <- master_output%>%
-#   filter(ID %in% ID_list)
 
 master_summary <- master_output%>%
-  group_by(variable,years_until_disoccupation)%>%
+  group_by(variable,years_until_resettlement)%>%
   summarize(mean_value = mean(climate_value,na.rm=T))%>%
   ungroup()%>%
   mutate(mean_value=rollmean(mean_value,k=10,fill=NA,align="center"))%>%
-  filter(years_until_disoccupation>10 & years_until_disoccupation <670)
+  filter(years_until_resettlement>10 & years_until_resettlement <670)
 
 master_95 <- master_output%>%
-  group_by(variable,years_until_disoccupation) %>%
+  group_by(variable,years_until_resettlement) %>%
   filter(climate_value >= quantile(climate_value, 0.95, na.rm = TRUE))%>%
   summarize(mean_value = min(climate_value,na.rm=T))%>%
   ungroup()%>%
   mutate(mean_value=rollmean(mean_value,k=10,fill=NA,align="center"))%>%
-  filter(years_until_disoccupation>10 & years_until_disoccupation <670)
+  filter(years_until_resettlement>10 & years_until_resettlement <670)
 
 master_05 <- master_output%>%
-  group_by(variable,years_until_disoccupation) %>%
+  group_by(variable,years_until_resettlement) %>%
   filter(climate_value <= quantile(climate_value, 0.05, na.rm = TRUE))%>%
   summarize(mean_value = max(climate_value,na.rm=T))%>%
   ungroup()%>%
   mutate(mean_value=rollmean(mean_value,k=10,fill=NA,align="center"))%>%
-  filter(years_until_disoccupation>10 & years_until_disoccupation <670)
+  filter(years_until_resettlement>10 & years_until_resettlement <670)
 
   
-png('./FIGURES/all_variables.png',height=18000,width=28000,res=1200)
-ggplot(data=master_output,aes(years_until_disoccupation,climate_value))+
+png('./FIGURES/all_variables.png',height=26000,width=20000,res=1200)
+ggplot(data=master_output,aes(years_until_resettlement,climate_value))+
   geom_line(aes(group=ID),alpha=0.01,linewidth=2,col="#8AB17D")+
-  geom_line(data=master_summary,aes(years_until_disoccupation,mean_value),color="grey20",linewidth=0.45)+
-    geom_line(data=master_95,aes(years_until_disoccupation,mean_value),color="grey50",linewidth=0.25)+
-    geom_line(data=master_05,aes(years_until_disoccupation,mean_value),color="grey50",linewidth=0.25)+
+  geom_line(data=master_summary,aes(years_until_resettlement,mean_value),color="grey20",linewidth=0.45)+
+    geom_line(data=master_95,aes(years_until_resettlement,mean_value),color="grey50",linewidth=0.25)+
+    geom_line(data=master_05,aes(years_until_resettlement,mean_value),color="grey50",linewidth=0.25)+
   labs(x="Years before Resettlement",
        y="Climate Variable (mm)",
        title=NULL)+
     theme_minimal()+
-  facet_wrap(~variable,scale="free_y",labeller=as_labeller(c(`mean_precipitation` = "Mean Annual Precipitation",`mean_precipitation_change` = "Year-to-Year Change in Mean Precipitation (Temporal Variability)",`std_precipitation`="Standard Deviation in Annual Precipitation (Spatial Variability)",`std_precipitation_change`="Year-to-Year Change in Standard Deviation Precipitation (Spatio-Temporal Variability)")))+
+  facet_wrap(~variable,scale="free_y",ncol=1,labeller=as_labeller(c(`mean_precipitation` = "Mean Annual Precipitation",`temporal_variability` = "Year-to-Year Change in Mean Precipitation (Temporal Variability)",`spatial_variability`="Standard Deviation in Annual Precipitation (Spatial Variability)",`spatiotemporal_variability`="Year-to-Year Change in Standard Deviation Precipitation (Spatio-Temporal Variability)",`precip_5yr_zscore`="5-year Z-score")))+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
         axis.text = element_text(size=12),
@@ -524,153 +698,386 @@ dev.off()
 
 ```
 
-### 5.2 Outlying variability and outlying aridity
+### 6.2 Examine Correlations and the Effect of Extreme Conditions
 
-Calculate correlations among those things.
+Calculate correlations among years until resettlement and the five climate measure. First, the `vepii_sites` data need to be simplified to make it easier to tabulate the associated settlement attributes (site length of occupation, site size, etc).
+
+Following observation that most climate variables dispersed as resettlement grew nearer, correlations were also run on subsets of each climate measure to see how the more extreme experiences of each condition related to resettlement.
+
+```{r}
+#| echo: false
+vep_occupation_timeseries_simplified <- vepii_sites%>%
+  st_drop_geometry()%>%
+  select(c("ph6","ph7","ph8","ph9","ph10","ph11","ph12",
+           "ph13","ph14","ph15","ph16","ph17","ph18","ph19","UNIQ_ID"))%>%
+  gather(phase,value,-UNIQ_ID)%>%
+  mutate(value = ifelse(value<0,0,value))%>%
+  left_join(.,vep_dates,c("phase"="PHASE"))%>%
+  arrange(.,desc(UNIQ_ID),BEGIN_D)%>%
+  subset(value>0)%>%
+  select(-c("phase","value"))%>%
+  setNames(c("ID","BEGIN_DATE","END_DATE"))%>%
+  arrange(ID,BEGIN_DATE)%>%
+  group_by(ID)%>%
+  mutate(continuous = BEGIN_DATE==lag(END_DATE)+1,
+         group = cumsum(is.na(continuous)|!continuous))%>%
+  group_by(ID,group)%>%
+  summarise(BEGIN_DATE=min(BEGIN_DATE),
+            END_DATE = max(END_DATE))%>%
+  mutate(occupation_length = END_DATE-BEGIN_DATE) 
+```
+
+Subset the `master_output` data to make it easier to calculate value above or below specific percentiles.
+
+```{r}
+#| echo: false
+master_mean <- subset(master_output, variable == "mean_precipitation")
+master_std <- subset(master_output, variable == "spatial_variability")
+change_mean <- subset(master_output, variable == "temporal_variability")
+change_std <- subset(master_output, variable == "spatiotemporal_variability")
+z_score <- subset(master_output, variable == "precip_5yr_zscore")
+```
 
 ```{r}
 #| echo: false
 
-master_mean <- subset(master_output, variable == "mean_precipitation")
-master_std <- subset(master_output, variable == "std_precipitation")
-change_mean <- subset(master_output, variable == "mean_precipitation_change")
-change_std <- subset(master_output, variable == "std_precipitation_change")
+change_mean_5before <- subset(change_mean,years_until_resettlement == 5)
+change_mean_400before <- subset(change_mean,years_until_resettlement ==400)
+
+range(change_mean_5before$climate_value)
+range(change_mean_400before$climate_value)
+
+```
+
+#### 6.2.1 Examine Correlations for all values at lowest percentiles
+
+For all climate measures, values at each percentile from ≤ P~49~ to ≤ P~1~ were identified and correlations were calculated. These percentiles are especially important for correctly measuring the most extreme experiences of precipitation availability and directional precipitation change.
+
+```{r}
+#| echo: false
+
+mean_df_low <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.01, 0.49, by = 0.01))
+
+std_df_low <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.01, 0.49, by = 0.01))
+
+mean_change_df_low <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.01, 0.49, by = 0.01))
+
+std_change_df_low <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.01, 0.49, by = 0.01))
+
+z_df_low <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.01, 0.49, by = 0.01))
 
 
-mean_df <- as.data.frame(matrix(0,99,4))%>%
-  setNames(c("percentile","cor_coef","p_value","site_count"))%>%
-  mutate(percentile = seq(0.01, 0.99, by = 0.01))
-
-std_df <- as.data.frame(matrix(0,99,4))%>%
-  setNames(c("percentile","cor_coef","p_value","site_count"))%>%
-  mutate(percentile = seq(0.01, 0.99, by = 0.01))
-
-mean_change_df <- as.data.frame(matrix(0,99,4))%>%
-  setNames(c("percentile","cor_coef","p_value","site_count"))%>%
-  mutate(percentile = seq(0.01, 0.99, by = 0.01))
-
-std_change_df <- as.data.frame(matrix(0,99,4))%>%
-  setNames(c("percentile","cor_coef","p_value","site_count"))%>%
-  mutate(percentile = seq(0.01, 0.99, by = 0.01))
-
-
-for(i in 1:99){
-  perc <- mean_df[i,1] # for measuring amount of precip/negative cahnge (means)
+for (i in 1:49){
+  perc <- mean_df_low[i,1] # for measuring amount of precip/negative change (means)
   
-  if(i <= 49){
+  mean_sub <- master_mean%>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    ungroup()
+  
+  m_s_test <- cor.test(mean_sub$years_until_resettlement,mean_sub$climate_value)
+  
+  mean_df_low[i,c("cor_coef")] <- m_s_test$estimate
+  mean_df_low[i,c("p_value")] <- m_s_test$p.value
+  mean_df_low[i,c("site_count")] <- length(unique(mean_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% mean_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% mean_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% mean_sub$ID)
+  
+
+  mean_df_low[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  mean_df_low[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+  
+  # std precip
+  std_sub <- master_std%>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    ungroup()
+  
+  s_s_test <- cor.test(std_sub$years_until_resettlement,std_sub$climate_value)
+  
+  std_df_low[i,c("cor_coef")] <- s_s_test$estimate
+  std_df_low[i,c("p_value")] <- s_s_test$p.value
+  std_df_low[i,c("site_count")] <- length(unique(std_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% std_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% std_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% std_sub$ID)
+  
+  std_df_low[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  std_df_low[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+  
+  
+  # mean precip change
+  mean_change_sub <- change_mean%>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    ungroup()
+  
+  m_c_test <- cor.test(mean_change_sub$years_until_resettlement,mean_change_sub$climate_value)
+  
+  mean_change_df_low[i,c("cor_coef")] <- m_c_test$estimate
+  mean_change_df_low[i,c("p_value")] <- m_c_test$p.value
+  mean_change_df_low[i,c("site_count")] <- length(unique(mean_change_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% mean_change_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% mean_change_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% mean_change_sub$ID)
+  
+  mean_change_df_low[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  mean_change_df_low[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+  
+  # std precip
+  std_change_sub <- change_std%>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    ungroup()
+  
+  s_c_test <- cor.test(std_change_sub$years_until_resettlement,std_change_sub$climate_value)
+  
+  std_change_df_low[i,c("cor_coef")] <- s_c_test$estimate
+  std_change_df_low[i,c("p_value")] <- s_c_test$p.value
+  std_change_df_low[i,c("site_count")] <- length(unique(std_change_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% std_change_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% std_change_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% std_change_sub$ID)
+  
+  std_change_df_low[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  std_change_df_low[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+  
+  
+  # z score
+  z_score_sub <- z_score%>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    ungroup()
+  
+  z_test <- cor.test( z_score_sub$years_until_resettlement, z_score_sub$climate_value)
+  
+   z_df_low[i,c("cor_coef")] <- z_test$estimate
+   z_df_low[i,c("p_value")] <- z_test$p.value
+   z_df_low[i,c("site_count")] <- length(unique(z_score_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% z_score_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% z_score_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% z_score_sub$ID)
+  
+  z_df_low[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  z_df_low[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+}
+```
+
+#### 6.2.2 Examine Correlations for all values at highest percentiles
+
+Similarly, for each climate measure, values at each percentile from ≥ P~51~ to ≥ P~99~ were identified and correlations were also run. These percentiles are especially important for correctly measuring the most extreme experiences of absolute precipitation change.
+
+```{r}
+#| echo: false
+mean_df_high <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.51, 0.99, by = 0.01))
+
+std_df_high <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.51, 0.99, by = 0.01))
+
+mean_change_df_high <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.51, 0.99, by = 0.01))
+
+std_change_df_high <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.51, 0.99, by = 0.01))
+
+z_df_high <- as.data.frame(matrix(0,49,6))%>%
+  setNames(c("percentile","cor_coef","p_value","site_count","longevity","average_size_of_vep_rmblk"))%>%
+  mutate(percentile = seq(0.51, 0.99, by = 0.01))
+
+for(i in 1:49){
+  perc <- mean_df_high[i,1] # for measuring amount of precip/negative change (means)
+  
   # mean precip
   mean_sub <- master_mean%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
     ungroup()
   
-  m_s_test <- cor.test(mean_sub$years_until_disoccupation,mean_sub$climate_value)
+  m_s_test <- cor.test(mean_sub$years_until_resettlement,mean_sub$climate_value)
   
-  mean_df[i,c("cor_coef")] <- m_s_test$estimate
-  mean_df[i,c("p_value")] <- m_s_test$p.value
-  mean_df[i,c("site_count")] <- length(unique(mean_sub$ID))
+  mean_df_high[i,c("cor_coef")] <- m_s_test$estimate
+  mean_df_high[i,c("p_value")] <- m_s_test$p.value
+  mean_df_high[i,c("site_count")] <- length(unique(mean_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% mean_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% mean_sub$ID)
+  
+    vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% mean_sub$ID)
+  
+  mean_df_high[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  mean_df_high[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
   
   # std precip
   std_sub <- master_std%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
     ungroup()
   
-  s_s_test <- cor.test(std_sub$years_until_disoccupation,std_sub$climate_value)
+  s_s_test <- cor.test(std_sub$years_until_resettlement,std_sub$climate_value)
   
-  std_df[i,c("cor_coef")] <- s_s_test$estimate
-  std_df[i,c("p_value")] <- s_s_test$p.value
-  std_df[i,c("site_count")] <- length(unique(std_sub$ID))
+  std_df_high[i,c("cor_coef")] <- s_s_test$estimate
+  std_df_high[i,c("p_value")] <- s_s_test$p.value
+  std_df_high[i,c("site_count")] <- length(unique(std_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% std_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% std_sub$ID)
+  
+    vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% std_sub$ID)
+  
+  std_df_high[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  std_df_high[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
   
   # mean precip change
   mean_change_sub <- change_mean%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
+    group_by(years_until_resettlement) %>%
+    filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
     ungroup()
   
-  m_c_test <- cor.test(mean_change_sub$years_until_disoccupation,mean_change_sub$climate_value)
+  m_c_test <- cor.test(mean_change_sub$years_until_resettlement,mean_change_sub$climate_value)
   
-  mean_change_df[i,c("cor_coef")] <- m_c_test$estimate
-  mean_change_df[i,c("p_value")] <- m_c_test$p.value
-  mean_change_df[i,c("site_count")] <- length(unique(mean_change_sub$ID))
+  mean_change_df_high[i,c("cor_coef")] <- m_c_test$estimate
+  mean_change_df_high[i,c("p_value")] <- m_c_test$p.value
+  mean_change_df_high[i,c("site_count")] <- length(unique(mean_change_sub$ID))
+  
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% mean_change_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% mean_change_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% mean_change_sub$ID)
+  
+  mean_change_df_high[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  mean_change_df_high[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
   
   # std precip
   std_change_sub <- change_std%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value <= quantile(climate_value, perc, na.rm = TRUE)) %>%
-    ungroup()
-  
-  s_c_test <- cor.test(std_change_sub$years_until_disoccupation,std_change_sub$climate_value)
-  
-  std_change_df[i,c("cor_coef")] <- s_c_test$estimate
-  std_change_df[i,c("p_value")] <- s_c_test$p.value
-  std_change_df[i,c("site_count")] <- length(unique(std_change_sub$ID))
-  
-  } else {
-    # mean precip
-  mean_sub <- master_mean%>%
-    group_by(years_until_disoccupation) %>%
+    group_by(years_until_resettlement) %>%
     filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
     ungroup()
   
-  m_s_test <- cor.test(mean_sub$years_until_disoccupation,mean_sub$climate_value)
+  s_c_test <- cor.test(std_change_sub$years_until_resettlement,std_change_sub$climate_value)
   
-  mean_df[i,c("cor_coef")] <- m_s_test$estimate
-  mean_df[i,c("p_value")] <- m_s_test$p.value
-  mean_df[i,c("site_count")] <- length(unique(mean_sub$ID))
+  std_change_df_high[i,c("cor_coef")] <- s_c_test$estimate
+  std_change_df_high[i,c("p_value")] <- s_c_test$p.value
+  std_change_df_high[i,c("site_count")] <- length(unique(std_change_sub$ID))
   
-  # std precip
-  std_sub <- master_std%>%
-    group_by(years_until_disoccupation) %>%
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% std_change_sub$ID)
+  
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% std_change_sub$ID)
+  
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% std_change_sub$ID)
+  
+  std_change_df_high[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  std_change_df_high[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
+  
+  
+  # z score
+  z_score_sub <- z_score%>%
+    group_by(years_until_resettlement) %>%
     filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
     ungroup()
   
-  s_s_test <- cor.test(std_sub$years_until_disoccupation,std_sub$climate_value)
+  z_test <- cor.test( z_score_sub$years_until_resettlement, z_score_sub$climate_value)
   
-  std_df[i,c("cor_coef")] <- s_s_test$estimate
-  std_df[i,c("p_value")] <- s_s_test$p.value
-  std_df[i,c("site_count")] <- length(unique(std_sub$ID))
+   z_df_high[i,c("cor_coef")] <- z_test$estimate
+   z_df_high[i,c("p_value")] <- z_test$p.value
+   z_df_high[i,c("site_count")] <- length(unique(z_score_sub$ID))
   
-  # mean precip change
-  mean_change_sub <- change_mean%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
-    ungroup()
+  gh_in_sub <- gh%>%
+    filter(SITE_NA %in% z_score_sub$ID)
   
-  m_c_test <- cor.test(mean_change_sub$years_until_disoccupation,mean_change_sub$climate_value)
+  vep_in_sub <- vepii_sites%>%
+    filter(UNIQ_ID %in% z_score_sub$ID)
   
-  mean_change_df[i,c("cor_coef")] <- m_c_test$estimate
-  mean_change_df[i,c("p_value")] <- m_c_test$p.value
-  mean_change_df[i,c("site_count")] <- length(unique(mean_change_sub$ID))
+  vep_occ_in_sub <- vep_occupation_timeseries_simplified%>%
+    filter(ID %in% z_score_sub$ID)
   
-  # std precip
-  std_change_sub <- change_std%>%
-    group_by(years_until_disoccupation) %>%
-    filter(climate_value >= quantile(climate_value, perc, na.rm = TRUE)) %>%
-    ungroup()
-  
-  s_c_test <- cor.test(std_change_sub$years_until_disoccupation,std_change_sub$climate_value)
-  
-  std_change_df[i,c("cor_coef")] <- s_c_test$estimate
-  std_change_df[i,c("p_value")] <- s_c_test$p.value
-  std_change_df[i,c("site_count")] <- length(unique(std_change_sub$ID))
-  }
-
+  z_df_high[i,c("longevity")] <- mean(c(gh_in_sub$occupation_length,vep_occ_in_sub$occupation_length))
+  z_df_high[i,c("average_size_of_vep_rmblk")] <- mean(vep_in_sub$roomblock.area..m2,na.rm=T)
 }
+```
 
-mean_df<- mean_df%>%
+#### 6.2.1 Plot Results
+
+Combine all of the results, identify correlations with significant p-values, and plot.
+
+```{r}
+#| echo: false
+
+mean_df <- rbind(mean_df_low, mean_df_high)%>%
   mutate(sig = ifelse(p_value <= 0.05,1,0))
          
-std_df<- std_df%>%
+std_df<- rbind(std_df_low,std_df_high)%>%
   mutate(sig = ifelse(p_value <= 0.05,1,0))
 
-mean_change_df<- mean_change_df%>%
+mean_change_df<- rbind(mean_change_df_low,mean_change_df_high)%>%
   mutate(sig = ifelse(p_value <= 0.05,1,0))
          
-std_change_df<- std_change_df%>%
+std_change_df<- rbind(std_change_df_low,std_change_df_high)%>%
   mutate(sig = ifelse(p_value <= 0.05,1,0))
 
-         
+z_df <- rbind(z_df_low,z_df_high)%>%
+  mutate(sig = ifelse(p_value <= 0.05,1,0))
+  
 mean_df_sig <- mean_df%>%
   filter(sig == 1)
 std_df_sig <- std_df%>%
@@ -679,17 +1086,8 @@ mean_change_df_sig <- mean_change_df%>%
   filter(sig == 1)
 std_change_df_sig <- std_change_df%>%
   filter(sig == 1)
-
-```
-
-```{r}
-  # change_mean_sub <- change_mean%>%
-  #   group_by(years_until_disoccupation) %>%
-  #   filter(climate_value >= quantile(climate_value, 0.99, na.rm = TRUE)) %>%
-  #   ungroup()
-  # 
-  # ggplot(data=change_mean_sub,aes(years_until_disoccupation,climate_value))+
-  #   geom_point()
+z_df_sig <-z_df%>%
+  filter(sig==1)
 ```
 
 ```{r}
@@ -699,23 +1097,53 @@ p1 <- ggplot()+
   annotate("rect",xmin=0.01,xmax=0.5,ymin=0,ymax=1,fill="grey70",alpha=0.1)+
   annotate("rect",xmin=0.5,xmax=0.99,ymin=-1,ymax=0,fill="grey70",alpha=0.1)+
   annotate("rect",xmin=0.01,xmax=0.5,ymin=0,ymax=1,fill=NA,color="#4D4D4D80")+
-  geom_line(data=mean_df,aes(percentile,cor_coef),col="#bb3e03",lwd=1.2)+
-  geom_point(data=mean_df_sig,aes(percentile,cor_coef),col="#bb3e03",size=1.5)+
+  geom_line(data=mean_df,aes(percentile,cor_coef),col="#780000",lwd=1.2)+
+  geom_point(data=mean_df_sig,aes(percentile,cor_coef),col="#780000",size=1.5)+
+  
+   annotate("text",x=0.48,y=0.85,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=1,lineheight = 0.8)+ 
+    annotate("text",x=0.48,y=0.73,label="Low. Precip",size=4, color="#780000",hjust=1)+
+
+  annotate("text",x=0.52,y=-0.7,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=0,lineheight = 0.8)+ 
+      annotate("text",x=0.52,y=-0.82,label="High Precip",size=4, color="#780000",hjust=0)+
+
+  labs(x=NULL,
+       y="Coorelation Coefficient",
+       title= "Precipitation Availability",
+       subtitle="A")+
+  
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.title=element_text(size=22,hjust=0.5),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p2 <- ggplot()+
+  annotate("rect",xmin=0.01,xmax=0.5,ymin=0,ymax=1,fill="grey70",alpha=0.1)+
+  annotate("rect",xmin=0.5,xmax=0.99,ymin=-1,ymax=0,fill="grey70",alpha=0.1)+
+  annotate("rect",xmin=0.01,xmax=0.5,ymin=0,ymax=1,fill=NA,color="#4D4D4D80")+
+  geom_line(data=z_df,aes(percentile,cor_coef),col="#bb3e03",lwd=1.2)+
+  geom_point(data=z_df_sig,aes(percentile,cor_coef),col="#bb3e03",size=1.5)+
   geom_line(data=mean_change_df,aes(percentile,cor_coef),col="#ee9b00",lwd=1.2)+
   geom_point(data=mean_change_df_sig,aes(percentile,cor_coef),col="#ee9b00",size=1.5)+
   
    annotate("text",x=0.48,y=0.85,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=1,lineheight = 0.8)+ 
-    annotate("text",x=0.49,y=0.73,label="Low Precip.",size=4, color="#bb3e03",hjust=1)+
+    annotate("text",x=0.49,y=0.73,label="Negative 5-year Z-scores",size=4, color="#bb3e03",hjust=1)+
    annotate("text",x=0.48,y=0.67,label="Negative Temporal Variability",size=4, color="#ee9b00",hjust=1)+
 
   annotate("text",x=0.52,y=-0.7,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=0,lineheight = 0.8)+ 
-  annotate("text",x=0.52,y=-0.82,label="High Precip.",size=4, color="#bb3e03",hjust=0)+
+  annotate("text",x=0.52,y=-0.82,label="Positive 5-year Z-scores",size=4, color="#bb3e03",hjust=0)+
   annotate("text",x=0.52,y=-0.88,label="Positive Temporal Variability",size=4, color="#ee9b00",hjust=0)+
 
 
   labs(x=NULL,
-       y="Coorelation Coefficient",
-       title= "A")+
+       y=NULL,
+       title= "Directional Precipitation Change",
+       subtitle="B")+
   
   scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
   
@@ -723,137 +1151,226 @@ p1 <- ggplot()+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
         axis.text = element_text(size=10),
-        axis.title.y = element_text(size=15,margin=margin(r=20)),
-        plot.margin = margin(10,10,10,10),
-        title=element_text(size=17))
+        plot.margin = margin(5,10,0,10),
+        plot.title=element_text(size=22,hjust=0.5),
+        plot.subtitle=element_text(size=17,color="grey30"))
 
-p2<- ggplot()+
+p3<- ggplot()+
   annotate("rect",xmin=0.01,xmax=0.5,ymin=0,ymax=1,fill="grey70",alpha=0.1)+
   annotate("rect",xmin=0.5,xmax=0.99,ymin=-1,ymax=0,fill="grey70",alpha=0.1)+
   annotate("rect",xmin=0.5,xmax=0.99,ymin=-1,ymax=0,fill=NA,color="#4D4D4D80")+
-  geom_line(data=std_df,aes(percentile,cor_coef),col="#005f73",lwd=1.2)+
-  geom_point(data=std_df_sig,aes(percentile,cor_coef),col="#005f73",size=1.5)+
-  geom_line(data=std_change_df,aes(percentile,cor_coef),col="#94d2bd",lwd=1.2)+
-  geom_point(data=std_change_df_sig,aes(percentile,cor_coef),col="#94d2bd",size=1.5)+
-  
+  geom_line(data=std_change_df,aes(percentile,cor_coef),col="#005f73",lwd=1.2)+
+  geom_point(data=std_change_df_sig,aes(percentile,cor_coef),col="#005f73",size=1.5)+
+  geom_line(data=std_df,aes(percentile,cor_coef),col="#94d2bd",lwd=1.2)+
+  geom_point(data=std_df_sig,aes(percentile,cor_coef),col="#94d2bd",size=1.5)+
+
      annotate("text",x=0.48,y=0.85,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=1,lineheight = 0.8)+ 
-  annotate("text",x=0.48,y=0.73,label="Less Spatial Variability",size=4, color="#005f73",hjust=1)+
-      annotate("text",x=0.48,y=0.67,label="Less Spatio-temporal Variability",size=4, color="#94d2bd",hjust=1)+
+  annotate("text",x=0.48,y=0.73,label="Less Spatio-temporal Variability",size=4, color="#005f73",hjust=1)+
+      annotate("text",x=0.48,y=0.67,label="Less Spatial Variability",size=4, color="#94d2bd",hjust=1)+
   
     annotate("text",x=0.52,y=-0.7,label="Closer to \nResettlement \nAssociated with:",size=4, color="grey10",hjust=0,lineheight = 0.8)+ 
-  annotate("text",x=0.52,y=-0.82,label="More Spatial Variability",size=4, color="#005f73",hjust=0)+
-  annotate("text",x=0.52,y=-0.88,label="More Spatio-temporal Variability",size=4, color="#94d2bd",hjust=0)+
+  annotate("text",x=0.52,y=-0.82,label="More Spatio-temporal Variability",size=4, color="#005f73",hjust=0)+
+  annotate("text",x=0.52,y=-0.88,label="More Spatial Variability",size=4, color="#94d2bd",hjust=0)+
   
   labs(x=NULL,
        y=NULL,
-       title= "B")+
+       title= "Absolute Precipitation Change",
+       subtitle="C")+
   scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
   theme_minimal()+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
         axis.text = element_text(size=10),
-        plot.margin = margin(10,10,10,10),
-        title=element_text(size=17))
-p3 <- ggplot()+
-  geom_point(data=mean_change_df,aes(percentile, site_count),col="#ee9b00")+
-  geom_point(data=mean_df,aes(percentile, site_count),col="#bb3e03")+
-  labs(x="Percentile",
-       y="No. of Sites",
-       title= "C")+
-  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
-  scale_y_continuous(limits=c(0,6000),breaks=c(0,2000,4000,6000))+
-  theme_minimal()+
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
-        axis.text = element_text(size=10),
-        axis.title.y = element_text(size=15,margin=margin(r=20)),
-        axis.title.x = element_text(size=15,margin=margin(t=20)),
-        plot.margin = margin(10,10,10,10),
-        title=element_text(size=17))
+        plot.margin = margin(5,10,0,10),
+        plot.title=element_text(size=22,hjust=0.5),
+        plot.subtitle=element_text(size=17,color="grey30"))
 
-p4<-ggplot()+
+p4 <- ggplot()+
+  geom_point(data=mean_df,aes(percentile, site_count), col="#780000")+
+  labs(x=NULL,
+       y="No. of Sites",
+       subtitle= "D")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(0,7000),breaks=c(1000,3000,5000,7000))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17))
+
+p5 <- ggplot()+
+  geom_point(data=mean_change_df,aes(percentile, site_count),col="#ee9b00")+
+  geom_point(data=z_df,aes(percentile, site_count),col="#bb3e03")+
+  labs(x=NULL,
+       y=NULL,
+       subtitle= "E")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(0,7000),breaks=c(1000,3000,5000,7000))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p6<-ggplot()+
   geom_point(data=std_df,aes(percentile, site_count),col="#005f73")+
   geom_point(data=std_change_df,aes(percentile, site_count),col="#94d2bd")+
-  labs(x="Percentile",
+  labs(x=NULL,
        y=NULL,
-       title= "D")+
+       subtitle= "F")+
   scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
-  scale_y_continuous(limits=c(0,6000),breaks=c(0,2000,4000,6000))+
+  scale_y_continuous(limits=c(0,7000),breaks=c(1000,3000,5000,7000))+
   theme_minimal()+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
         axis.text = element_text(size=10),
-        axis.title.x = element_text(size=15,margin=margin(t=20)),
-        plot.margin = margin(10,10,10,10),
-        title=element_text(size=17))
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
 
-png('./FIGURES/standarddeviation_and_change.png',height=16000,width=24000,res=1200)
-ggarrange(p1,p2,p3,p4,
-          ncol=2,nrow=2,align="hv",heights=c(1.5,0.7))
+
+p7 <- ggplot()+
+  geom_point(data=mean_df,aes(percentile, longevity), col="#780000")+
+  labs(x=NULL,
+       y="Average Length of \nOccupation (years)",
+       subtitle= "G")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(100,305),breaks=c(100,200,300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p8<-ggplot()+
+  geom_point(data=mean_change_df,aes(percentile,longevity),col="#ee9b00")+
+  geom_point(data=z_df,aes(percentile,longevity),col="#bb3e03")+
+  labs(x=NULL,
+       y=NULL,
+       subtitle= "H")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(100,305),breaks=c(100,200,300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p9<-ggplot()+
+  geom_point(data=std_df,aes(percentile,longevity),col="#005f73")+
+  geom_point(data=std_change_df,aes(percentile,longevity),col="#94d2bd")+
+  labs(x=NULL,
+       y=NULL,
+       subtitle= "I")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(100,305),breaks=c(100,200,300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=15,margin=margin(t=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+
+p10 <- ggplot()+
+  geom_point(data=mean_df,aes(percentile, average_size_of_vep_rmblk), col="#780000")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(250,450),breaks=c(250,350,450))+
+  labs(x="Percentile",
+       y="Average Roomblock Size \n(sq. m)",
+       subtitle= "J")+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        axis.title.x = element_text(size=15,margin=margin(t=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p11 <- ggplot()+
+  geom_point(data=mean_change_df,aes(percentile,average_size_of_vep_rmblk),col="#ee9b00")+
+  geom_point(data=z_df,aes(percentile,average_size_of_vep_rmblk),col="#bb3e03")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(250,450),breaks=c(250,350,450))+
+  labs(x="Percentile",
+       y=NULL,
+       subtitle= "K")+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.x = element_text(size=15,margin=margin(t=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+p12 <- ggplot()+
+  geom_point(data=std_df,aes(percentile,average_size_of_vep_rmblk),col="#005f73")+
+  geom_point(data=std_change_df,aes(percentile,average_size_of_vep_rmblk),col="#94d2bd")+
+  scale_x_continuous(breaks = c(0.01,0.25,0.5,0.75,0.99), labels = c("<0.01","<0.25","0.5",">0.75",">0.99"))+
+  scale_y_continuous(limits=c(250,450),breaks=c(250,350,450))+
+  labs(x="Percentile",
+       y=NULL,
+       subtitle= "L")+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=10),
+        axis.title.x = element_text(size=15,margin=margin(t=5)),
+        plot.margin = margin(5,10,0,10),
+        plot.subtitle=element_text(size=17,color="grey30"))
+
+png('./FIGURES/Figure_4.png',height=20000,width=24000,res=1200)
+ggarrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
+          ncol=3,nrow=4,align="hv",heights=c(1.65,0.7,0.7,0.7))
 dev.off()
 
 ```
 
+Combine and export
+
 ```{r}
-# test <- master_output%>%
-#   spread(key=variable,climate_value)
+#| echo: false
 
-
-mod <- lm(years_until_disoccupation ~ mean_precipitation,data=test)
-mod_s <- summary(mod)
-mod_s$sigma
-
-mod1 <- lm(years_until_disoccupation ~ mean_precipitation_change,data=test)
-mod1_s <- summary(mod1)
-mod1_s$sigma
-
-mod2 <- lm(years_until_disoccupation ~ std_precipitation,data=test)
-mod2_s <- summary(mod2)
-mod2_s$sigma
-
-mod3 <- lm(years_until_disoccupation ~ std_precipitation_change,data=test)
-mod3_s <- summary(mod3)
-mod3_s$sigma
-
-
-mod4 <- lm(years_until_disoccupation ~ mean_precipitation+mean_precipitation_change+ std_precipitation+std_precipitation_change,data=test)
-mod4_s <- summary(mod4)
-mod4_s$sigma
-
-mod5 <- lm(years_until_disoccupation ~ mean_precipitation_change+ std_precipitation+std_precipitation_change,data=test)
-mod5_s <- summary(mod5)
-mod5_s$sigma
-
+write.csv(mean_df,"./OUTPUT/precip_availability_cor.csv",row.names=F)
+write.csv(std_df,"./OUTPUT/precip_spatialvariability_cor.csv",row.names=F)
+write.csv(mean_change_df,"./OUTPUT/precip_temporalvariability_cor.csv",row.names=F) 
+write.csv(std_change_df,"./OUTPUT/precip_spatiotemporalvariability_cor.csv",row.names=F)
+write.csv(z_df,"./OUTPUT/precip_5yrzscore_cor.csv",row.names=F)
 ```
 
-## 6.0 Dendrochronological Data
+## 7.0 Analyze Dendrochronological Data
 
 Accessed from ....:
 
+https://doi.org/10.6067/XCV82J6D7B
+
 1.  copy formatting from above
 
-### 6.1 Import data
+### 7.1 Import data
 
 ```{r}
 #| echo: false
 dendro_dates <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS//BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
-  st_as_sf(.,coords=c("LON","LAT"),crs=4269)%>%
+  st_as_sf(.,coords=c("LON","LAT"),crs=4326)%>%
   st_intersection(.,study_extent)%>%
   subset(.,Outer_Symbol == "V"|Outer_Symbol=="RLB"|Outer_Symbol=="R"|Outer_Symbol=="+B"|Outer_Symbol=="++G"|Outer_Symbol=="RG"|Outer_Symbol=="+V"|Outer_Symbol=="L"|Outer_Symbol=="+RLB"|Outer_Symbol=="CB"|Outer_Symbol=="+L"|Outer_Symbol=="+LB"|Outer_Symbol=="LGB"|Outer_Symbol=="C"|Outer_Symbol=="CL"|Outer_Symbol=="+R"|Outer_Symbol=="+CL"|Outer_Symbol=="CGB"|Outer_Symbol=="RLG"|Outer_Symbol=="GB"|Outer_Symbol=="VL"|Outer_Symbol=="GLB"|Outer_Symbol=="+GLB"|Outer_Symbol=="BB"|Outer_Symbol=="+LG"|Outer_Symbol=="+RGB"|Outer_Symbol=="CLB"|Outer_Symbol=="c"|Outer_Symbol=="r"|Outer_Symbol=="cB"|Outer_Symbol=="+r"|Outer_Symbol=="rB"|Outer_Symbol=="+VL"|Outer_Symbol=="CG"|Outer_Symbol=="+CG"|Outer_Symbol=="RC"|Outer_Symbol=="LB "|Outer_Symbol=="rGB"|Outer_Symbol== "RB COM"|Outer_Symbol== "R COMP"|Outer_Symbol== "R INC")%>%
   subset(.,!is.na(Site_Number))%>%
   mutate(ID=1:nrow(.))
 
-
 duplicates <- st_coordinates(dendro_dates)%>%
   duplicated()
 
 dendro_dates_unique_loc <- dendro_dates[!duplicates,]
-
-ggplot()+
-  geom_sf(data=dendro_dates)
 ```
 
-### 6.2 Synthesize Climate Data
+### 7.2 Synthesize Climate Data
 
 ```{r}
 #| echo: false
@@ -876,37 +1393,42 @@ for(i in 1:nrow(dendro_dates_unique_loc)){
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
+    mutate(year=600:1351)%>%
     setNames(c("mean_precipitation","year"))
   
-  std_precipitation <- site_precip%>%
+  spatial_variability <- site_precip%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=1:2000)%>%
-    setNames(c("std_precipitation","year"))
+    mutate(year=600:1351)%>%
+    setNames(c("spatial_variability","year"))
   
-  mean_precipitation_change <- site_var%>%
+  temporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(mean,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("mean_precipitation_change","year"))
+    mutate(year=601:1351)%>%
+    setNames(c("temporal_variability","year"))
 
-  std_precipitation_change <- site_var%>%
+  spatiotemporal_variability <- site_var%>%
     select(-c("ID","fraction"))%>%
     summarise_all(sd,na.rm=T)%>%
     t()%>%
     as.data.frame()%>%
-    mutate(year=2:2000)%>%
-    setNames(c("std_precipitation_change","year"))
-
+    mutate(year=601:1351)%>%
+    setNames(c("spatiotemporal_variability","year"))
   
-  summary <- merge(mean_precipitation,std_precipitation,by="year")%>%
-    merge(.,mean_precipitation_change,by="year")%>%
-    merge(.,std_precipitation_change,by="year")%>%
+    z_scores <- mean_precipitation%>%
+    mutate(five_year_av = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=mean,fill=NA),
+            five_year_sd = rollapplyr(mean_precipitation,width=list(-(1:5)),FUN=sd,fill=NA),precip_5yr_zscore = (mean_precipitation-five_year_av)/five_year_sd)%>%
+  select(c("year","precip_5yr_zscore"))
+
+  summary <- merge(mean_precipitation,spatial_variability,by="year")%>%
+    merge(.,temporal_variability,by="year")%>%
+    merge(.,spatiotemporal_variability,by="year")%>%
+    merge(.,z_scores,by="year")%>%
     gather(.,key="variable",value="value",-year)%>%
     setNames(c("year","variable",site_name))
 
@@ -920,15 +1442,15 @@ for(i in 1:nrow(dendro_dates_unique_loc)){
 rm(site_precip,
    site_var,
    mean_precipitation,
-   std_precipitation,
-   mean_precipitation_change,
-   std_precipitation_change)
+   spatial_variability,
+   temporal_variability,
+   spatiotemporal_variability)
 
-write.csv(summary_all_dendro,"./OUTPUT/climatevariability_dendro.csv")
-
+# OPTIONAL:
+write.csv(summary_all_dendro,"./OUTPUT/climatevariability_dendro.csv",row.names=F)
 ```
 
-### 6.3 Synthesize occupation timeline
+### 7.3 Synthesize occupation timeline
 
 ```{r}
 #| echo: false
@@ -944,91 +1466,63 @@ dendro_df <-  st_drop_geometry(dendro_dates)%>%
          count_raw = count,
          count = zoo::na.approx(count))
 
-
-png('./FIGURES/TreeRing_timeseries.png',height=11000,width=18000,res=1200)
-ggplot()+
-  geom_line(data=dendro_df,aes(year,count,group=1,color=as.factor(interpolated)),linewidth=1)+
-  scale_color_manual(values=c("#8AB17D","#EE8959"))+
-  labs(title="Number of Tree Ring cutting Dates by Year",
-       x="Year",
-       y="Number of Cutting Dates",
-       subtitle="orange line represents interpolated values",
-  )+
-  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
-  theme_minimal()+
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
-        plot.title = element_text(size=17,margin=margin(t=10,b=3)),
-        axis.text = element_text(size=12),
-        axis.title.y = element_text(size=15,margin=margin(r=20)),
-        axis.title.x = element_text(size=15,margin=margin(t=20)),
-        plot.margin = margin(10,10,10,10),
-        strip.text.x = element_text(size=13,margin=margin(b=10,t=10)),
-        legend.position = "none",
-        plot.subtitle = element_text(size=12,margin=margin(t=5,b=3,r=100)))
-dev.off()
-
-
+# OPTIONAL
 write.csv(dendro_df,"./OUTPUT/dendro_activity_timeseries.csv")
 ```
 
-### 6.4 Combine Climate and Occupation
+### 7.4 Combine Climate and Occupation
 
 Used min and max because we want to find the values that are characteristic of the respective percentile limit.
 
 ```{r}
 #| echo: false
-summary_all_dendro <- read.csv("./OUTPUT/climatevariability_dendro.csv")%>%
-  select(-c("X"))%>%
+summary_dendro <- summary_all_dendro%>%
   filter(., year >= 1033 & year <= 1335)%>%
   gather(key=ID,value=climate_value,-c("year","variable"))%>%
   mutate(ID=as.numeric(sub("^X","",ID)))
 
-dendro_mean <- subset(summary_all_dendro, variable == "mean_precipitation")%>%
+
+dendro_mean <- subset(summary_dendro, variable == "mean_precipitation")%>%
     group_by(year) %>%
-    filter(climate_value <= quantile(climate_value, 0.05, na.rm = TRUE))%>%
-    summarise(mean_precipitation=max(climate_value,na.rm=T))
+    summarise(mean_precipitation=mean(climate_value,na.rm=T))
     
 
-dendro_std <- subset(summary_all_dendro, variable == "std_precipitation")%>%
+dendro_std <- subset(summary_dendro, variable == "spatial_variability")%>%
     group_by(year) %>%
-    filter(climate_value >= quantile(climate_value, 0.95, na.rm = TRUE))%>%
-    summarise(std_precipitation=min(climate_value,na.rm=T))
+    summarise(spatial_variability=mean(climate_value,na.rm=T))
 
-dendro_change_mean <- subset(summary_all_dendro, variable == "mean_precipitation_change")%>%
+
+dendro_change_mean <- subset(summary_dendro, variable == "temporal_variability")%>%
     group_by(year) %>%
-    filter(climate_value <= quantile(climate_value, 0.05, na.rm = TRUE))%>%
-    summarise(mean_precipitation_change=max(climate_value,na.rm=T))
+    summarise(temporal_variability=mean(climate_value,na.rm=T))
 
-dendro_change_std <- subset(summary_all_dendro, variable == "std_precipitation_change")%>%
+
+dendro_change_std <- subset(summary_dendro, variable == "spatiotemporal_variability")%>%
     group_by(year) %>%
-    filter(climate_value >= quantile(climate_value, 0.95, na.rm = TRUE))%>%
-    summarise(std_precipitation_change=min(climate_value,na.rm=T))
-
-dendro_timeseries <- read.csv("./OUTPUT/dendro_activity_timeseries.csv")%>%select(-c("X"))
+    summarise(spatiotemporal_variability=mean(climate_value,na.rm=T))
 
 
-dendro_combined_timeseries <- merge(dendro_timeseries,dendro_mean,by=c("year"))%>%
+dendro_z <- subset(summary_dendro, variable == "precip_5yr_zscore")%>%
+    group_by(year) %>%
+    summarise(precip_5yr_zscore=mean(climate_value,na.rm=T))
+
+dendro_combined_timeseries <- merge(dendro_df,dendro_mean,by=c("year"))%>%
 merge(.,dendro_std,by=c("year"))%>%
 merge(.,dendro_change_mean,by=c("year"))%>%
-merge(.,dendro_change_std,by=c("year"))
+merge(.,dendro_change_std,by=c("year"))%>%
+merge(.,dendro_z,by=c("year"))
+```
 
-             
-             
-# ggplot()+
-#   geom_line(data=dendro_combined_timeseries,aes(year,mean_precipitation),col="#bb3e03")+
-#   geom_line(data=dendro_combined_timeseries,aes(year,std_precipitation),col="#005f73")+
-#   geom_line(data=dendro_combined_timeseries,aes(year,mean_precipitation_change),col="#ee9b00")+
-#   geom_line(data=dendro_combined_timeseries,aes(year,std_precipitation_change),col="#94d2bd")
+Augmented Dickey-Fuller tests
 
-
-
+```{r}
 # p < 0.05 = stationary so good for granger causality
 adf.test(dendro_combined_timeseries[,2])
 adf.test(dendro_combined_timeseries[,5])
 adf.test(dendro_combined_timeseries[,6])
 adf.test(dendro_combined_timeseries[,7])
 adf.test(dendro_combined_timeseries[,8])
+adf.test(dendro_combined_timeseries[,9])
 ```
 
 ```{r}
@@ -1036,11 +1530,12 @@ adf.test(dendro_combined_timeseries[,8])
 
 gc_results <- data.frame(year_lag=1:25,
                          mean_precipitation=NA,
-                         mean_precipitation_change=NA,
-                         std_precipitation=NA,
-                         std_precipitation_change=NA)
+                         temporal_variability=NA,
+                         spatial_variability=NA,
+                         spatiotemporal_variability=NA,
+                         z_score=NA)
 
-for(i in c("mean_precipitation","std_precipitation","mean_precipitation_change","std_precipitation_change")){
+for(i in c("mean_precipitation","spatial_variability","temporal_variability","spatiotemporal_variability","precip_5yr_zscore")){
   
   dendro_sample <- dendro_combined_timeseries%>%
     select(all_of(c("count",i)))
@@ -1053,28 +1548,148 @@ for(i in c("mean_precipitation","std_precipitation","mean_precipitation_change",
 ```
 
 ```{r}
-png('./FIGURES/GrangerCausality.png',height=11000,width=18000,res=1200)
-ggplot()+
+#| echo: false
+
+p1<- ggplot()+
+  geom_line(data=dendro_df,aes(year,count,group=1,color=as.factor(interpolated)),linewidth=1)+
+  scale_color_manual(values=c("#8AB17D","#EE8959"))+
+  labs(title="Number of Tree Ring cutting Dates by Year",
+       x=NULL,
+       y="Number of Cutting Dates",
+       subtitle="orange line represents interpolated values",
+  )+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        plot.title = element_text(size=17,margin=margin(t=10,b=3)),
+        axis.text = element_text(size=12),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,5,10),
+        legend.position = "none")
+
+p2<-ggplot()+
+  geom_line(data=dendro_mean,aes(year,mean_precipitation),col="#bb3e03")+
+  labs(x=NULL,
+       y="Annual Mean Precipitation \n(mm)",
+       title=NULL)+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=12),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10))
+
+p3<-ggplot()+
+  geom_line(data=dendro_change_mean,aes(year,temporal_variability),col="#ee9b00")+
+  labs(x=NULL,
+       y="Temporal Variability \n(mm)",
+       title=NULL)+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=12),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10))
+
+
+p4<-ggplot()+
+  geom_line(data=dendro_z,aes(year,precip_5yr_zscore),col="#780000")+
+  labs(x=NULL,
+       y="5-year Z-score",
+       title=NULL)+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=12),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10))
+
+p5<-ggplot()+
+  geom_line(data=dendro_std,aes(year,spatial_variability),col="#94d2bd")+
+  labs(x=NULL,
+       y="Temporal Variability \n(standard deviation)",
+       title=NULL)+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=12),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10))
+
+p6<-ggplot()+
+  geom_line(data=dendro_change_std,aes(year,spatiotemporal_variability),col="#005f73")+
+  labs(x="Year (CE)",
+       y="Spatio-temporal Variability \n(standard deviation)",
+       title=NULL)+
+  scale_x_continuous(limits=c(1000,1350),breaks=c(1000,1100,1200,1300))+
+  theme_minimal()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
+        axis.text = element_text(size=12),
+        axis.title.x = element_text(size=15,margin=margin(t=5)),
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        plot.margin = margin(5,10,0,10))
+
+
+p7<-ggplot()+
+  geom_line(data=gc_results,aes(year_lag,precip_5yr_zscore),col="#780000")+
+  geom_point(data=gc_results,aes(year_lag,precip_5yr_zscore),col="#780000")+
   geom_line(data=gc_results,aes(year_lag,mean_precipitation),col="#bb3e03")+
   geom_point(data=gc_results,aes(year_lag,mean_precipitation),col="#bb3e03")+
-  geom_line(data=gc_results,aes(year_lag,std_precipitation),col="#005f73")+
-  geom_point(data=gc_results,aes(year_lag,std_precipitation),col="#005f73")+
-  geom_line(data=gc_results,aes(year_lag,mean_precipitation_change),col="#ee9b00")+
-  geom_point(data=gc_results,aes(year_lag,mean_precipitation_change),col="#ee9b00")+
-  geom_line(data=gc_results,aes(year_lag,std_precipitation_change),col="#94d2bd")+
-  geom_point(data=gc_results,aes(year_lag,std_precipitation_change),col="#94d2bd")+
+  geom_line(data=gc_results,aes(year_lag,spatial_variability),col="#94d2bd")+
+  geom_point(data=gc_results,aes(year_lag,spatial_variability),col="#94d2bd")+
+  geom_line(data=gc_results,aes(year_lag,temporal_variability),col="#ee9b00")+
+  geom_point(data=gc_results,aes(year_lag,temporal_variability),col="#ee9b00")+
+  geom_line(data=gc_results,aes(year_lag,spatiotemporal_variability),col="#005f73")+
+  geom_point(data=gc_results,aes(year_lag,spatiotemporal_variability),col="#005f73")+
   geom_hline(yintercept=0.05,col="grey30",linetype="dotted")+
   labs(x="Year Lag",
-       y="Granger Causality P-value",
+       y="Granger Causality \nP-value",
        title=NULL)+
   theme_minimal()+
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_line(linewidth = 0.1, color = "grey75"),
         axis.text = element_text(size=12),
-        axis.title.y = element_text(size=15,margin=margin(r=20)),
-        axis.title.x = element_text(size=15,margin=margin(t=20)),
-        plot.margin = margin(10,10,10,10),
-        legend.title=element_text(size=15),
-        legend.text = element_text(size=12))
+        axis.title.y = element_text(size=15,margin=margin(r=5)),
+        axis.title.x = element_text(size=15,margin=margin(t=5)),
+        plot.margin = margin(5,10,5,10))
+
+
+png('./FIGURES/Figure_5.png',height=26000,width=19000,res=1200)
+ggarrange(p1,p2,p3,p4,p5,p6,p7,
+          ncol=1,nrow=7,align="hv",heights=c(1.25,1,1,1,1,1,1.75))
 dev.off()
 ```
+
+## SUPPLEMENTALS
+
+```{r}
+#| echo: false  
+
+r_var1 <- r_var[[600:1300]]  
+
+df <- as.data.frame(r_var1,xy=T)%>%
+  pivot_longer(cols = -c(x, y), names_to = "layer",values_to = "value")%>%
+  mutate(layer_num = as.numeric(gsub("PPT_", "", layer)))  
+p <- ggplot() +   
+  geom_raster(data=df, aes(x = x, y = y, fill = value)) +   
+  scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0), name = "Precipitation  Variability (mm)")+   
+  geom_sf(data=study_extent,col="grey20",fill=NA)+   
+  geom_sf(data=four_corners,col="grey70",fill=NA,linetype="dotted")+   
+  coord_equal() +   
+  labs(title = "Year (CE): {frame_time}", 
+       x=NULL,
+       y=NULL) +   
+  transition_time(layer_num) +   
+  ease_aes("linear")+   
+  theme_minimal()  
+
+animate(p, fps = 5,nframes = 701, width = 750, height = 600)  anim_save("./FIGURES/raster_precip_variability_600to1300.gif")  
+```
+
+## 
