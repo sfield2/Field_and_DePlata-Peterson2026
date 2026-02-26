@@ -6,7 +6,7 @@ editor: visual
 
 # Research compendium for Field and DePlata-Peterson (2026)
 
-This R-based research compendium supports the...
+This R-based research compendium supports the analyses from *Absolute Precipitation as a Driver of Re-settlement in the northern US Southwest*, which shows that that local measures of absolute and directional change in precipitation are strongly correlated with settlement histories; however, absolute precipitation change is the most closely linked as an explanatory driver of near-term future construction activity.
 
 View the raw source code and output at: provide link
 
@@ -49,7 +49,7 @@ four_corners <- st_read("C:/Users/sfield3/OneDrive - University of Wyoming/FIELD
   st_intersection(.,study_extent)
 ```
 
-`paleoclimate_raster`: The paleoclimate raster is from PaleoCAR (Bocinsky et al. 2016). These data can be accessed two ways
+`paleoclimate_raster`: The paleoclimate raster is from PaleoCAR, a high resolution 2000 year reconstruction of annual precipitation and temperature based on a correlation-adjusted regression of tree-rings and contemporary PRISM models (Bocinsky et al. 2016). These data can be accessed several ways:
 
 1.  Access archives directly as NetCDF files as part of the NOAA National Centers for Environmental Information Paleoclimate archive at: [DOI](https://doi.org/10.25921/8ctk-8v26).
 2.  Access via SKOPE (associated github repository [here](https://github.com/bocinsky/paleocar_v2)). The scripts in this repository download the archived tiles, mosaic and write them as cloud-optimized GeoTIFFs, then uploads them to an [Amazon AWS S3 bucket](https://skope.s3.us-west-2.amazonaws.com/index.html), allowing them to queried remotely. The approach detailed below is adopted from <https://github.com/bocinsky/paleocar_v2>.
@@ -78,7 +78,7 @@ r <- terra::rast("https://skope.s3.us-west-2.amazonaws.com/paleocar_v2/ppt_water
 writeRaster(r,"./DATA/CLIMATE/PPT_600_1351.tif")
 ```
 
-### 2.1 Calculate Base Variability Raster
+### 2.1 Calculate Base Precipitation Variability Raster
 
 Calculate year-to-year change as a measure of temporal variability. This process calculates the difference from every year (2-2000 C.E.) and the previous year (1-1999 C.E.) for each cell.
 
@@ -94,7 +94,7 @@ writeRaster(r_var,"./DATA/CLIMATE/PPT_annualvariability_600_1351.tif")
 ```{r}
 #| echo: false
 
-# optional 
+# OPTIONAL: 
 # r <- terra::rast("./DATA/CLIMATE/PPT_600_1351.tif")
 # r_var <- terra::rast("./DATA/CLIMATE/PPT_annualvariability_600_1351.tif")
 ```
@@ -110,7 +110,7 @@ Settlement data of Chaco Great House communities comes from two sources:
     2.  The full citation for the database is: Heitman, Carrie C., Ruth Van Dyke, Matthew Peebles, and Kyle Boczinsky. 2016. Greater Chaco Landscapes Great House Communities GIS Integration Dataset. GIS dataset submitted to the National Park Service in partial fulfillment of Rocky Mountain Cooperative Ecosystems Study Unit Task Agreement Number: P14AC01703, Project #: UCOB-109.
 2.  `outlier_database`: This is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive. Access [here](https://www.chacoarchive.org/cra/outlier-database/).
 
-The geodatabase `chaco_greathouses` and the attribute `outlier_database` are merged to reconstruct occupation at 105 Chaco great house outliers. These data are stored under as the object `gh`.
+The geodatabase `chaco_greathouses` and the attributes from `outlier_database` are merged to reconstruct occupation at 105 Chaco great house outliers. These data are stored under as the object `gh`.
 
 ```{r}
 #| echo: false
@@ -143,6 +143,8 @@ Settlement data from the Village Ecodynamics Project (VEP) II north study area c
 
 To aid in later stages creating a complete occupation time series for all sites in the VEP database (see section 5.1.2), the date ranges for each occupational phase are imported.
 
+`vep_dates` can be accessed directly at: **INSERT GITHUB LINK**
+
 ```{r}
 #| echo: false
 vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
@@ -162,12 +164,12 @@ vep_dates <- read.csv("./DATA/VEP_dates.csv")
 
 In this study, five climate measures are assessed, which can are divided into three primary classes:
 
-1.  Precipitation availability:
-    1.  `mean_precipitation` - this is the mean annual precipitation within each catchment.
-2.  Directional change:
-    1.  `temporal_variability` - this is the mean year-to-year precipitation variability within each catchment.
+1.  **Precipitation availability:**
+    1.  `mean_precipitation` - this is the mean annual precipitation within each catchment
+2.  **Directional change:**
+    1.  `temporal_variability` - this is the mean year-to-year precipitation variability within each catchment
     2.  `5_yr_zscore` - this measure follows McCool et al. (2025: [DOI](https://doi.org/10.1017/aaq.2025.10107)) and measures "...whether the precipitation during any given year is higher or lower than the prior five-year average and what the magnitude of that change is" (pg. 107). This is done by finding the difference between the mean annual precipitation each year and the average for the previous five years and dividing it by the standard deviation of annual precipitation for the previous five years.
-3.  Absolute change:
+3.  **Absolute change:**
     1.  `spatial_variability` - this is the annual standard deviation within each catchment.
 
     2.  `spatiotemporal_variability` - this is the standard deviation year-to-year precipitation variability within each catchment. **NOTE:** in most places all of the change is either negative or positive, so usually absolute change is the additive inverse. However, in some places where some cells change positively and some negatively, the absolute change is different.
@@ -551,7 +553,7 @@ write.csv(summary_all_vep,"./OUTPUT/climatevariability_vep_habitations.csv", row
 
 ## 5.0 Integrate Climate and Settlement Data
 
-Climate measures were calculated annually from 600 to 1350 C.E. and tabulated as annual time series. To integrate these climate reconstructiosn and the settlement data, the site databases need to be transformed into time series.
+Climate measures were calculated annually from 600 to 1350 C.E. and tabulated as annual time series. To integrate these climate reconstructions and the settlement data, the site databases need to be transformed into time series.
 
 ### 5.1 Create Occupation Time Series
 
@@ -559,7 +561,7 @@ Rather than examining the correspondence between periods of climate and social s
 
 #### 5.1.1 Chaco Great House Occupation Time Series
 
-Chaco great houses used in this analysis did not have multi-component occupations, therefore calculating the years before resettlement were estimated easily by counting back from the occupational "END_DATE".
+Chaco great houses used in this analysis did not have multi-component occupations, therefore calculating the years before resettlement were estimated easily by counting back from the occupational `"END_DATE"`.
 
 ```{r}
 #| echo: false
@@ -694,8 +696,6 @@ ggplot(data=master_output,aes(years_until_resettlement,climate_value))+
         axis.title = element_text(size=16,margin=margin(t=20)),
         plot.margin = margin(10,10,10,10))
 dev.off()
-
-
 ```
 
 ### 6.2 Examine Correlations and the Effect of Extreme Conditions
@@ -727,7 +727,7 @@ vep_occupation_timeseries_simplified <- vepii_sites%>%
   mutate(occupation_length = END_DATE-BEGIN_DATE) 
 ```
 
-Subset the `master_output` data to make it easier to calculate value above or below specific percentiles.
+Subset the `master_output` data to make it easier to calculate conditions-specific values above or below percentile thresholds.
 
 ```{r}
 #| echo: false
@@ -738,14 +738,19 @@ change_std <- subset(master_output, variable == "spatiotemporal_variability")
 z_score <- subset(master_output, variable == "precip_5yr_zscore")
 ```
 
+As a demonstration of increased variability as years until resettlement grow nearer, look at the ranges in mean annual precipitation 5 years before resettlement and 400 years before resettlement.
+
 ```{r}
 #| echo: false
 
 change_mean_5before <- subset(change_mean,years_until_resettlement == 5)
 change_mean_400before <- subset(change_mean,years_until_resettlement ==400)
 
-range(change_mean_5before$climate_value)
+print("The range in mean annual precipitation 400 years before resettlement is:")
 range(change_mean_400before$climate_value)
+
+print("The range in mean annual precipitation 5 years before resettlement is:")
+range(change_mean_5before$climate_value)
 
 ```
 
@@ -1333,11 +1338,12 @@ dev.off()
 
 ```
 
-Combine and export
+Export.
 
 ```{r}
 #| echo: false
 
+#OPTIONAL: 
 write.csv(mean_df,"./OUTPUT/precip_availability_cor.csv",row.names=F)
 write.csv(std_df,"./OUTPUT/precip_spatialvariability_cor.csv",row.names=F)
 write.csv(mean_change_df,"./OUTPUT/precip_temporalvariability_cor.csv",row.names=F) 
@@ -1347,11 +1353,11 @@ write.csv(z_df,"./OUTPUT/precip_5yrzscore_cor.csv",row.names=F)
 
 ## 7.0 Analyze Dendrochronological Data
 
-Accessed from ....:
+Dendrochronological data was accessed from the Digital Archaeological Record (tDAR):
 
-https://doi.org/10.6067/XCV82J6D7B
+1.  Compiled Tree-ring Dates from the Southwestern United States (Restricted). Timothy A. Kohler, R. Kyle Bocinsky. Science Advances. 2016 ( tDAR id: 399314) ; [doi:10.6067/XCV82J6D7B](https://doi.org/10.6067/XCV82J6D7B)
 
-1.  copy formatting from above
+These data include 32,863 tree ring dates from archaeological sites in New Mexico, Arizon, Colorado and Utah. All date determination in the data set were made by the Laboratory of Tree Ring Research. Nearly all of these data (n =29,311 dates) were used by Bocinsky et al. (2016, [DOI](https://doi.org/10.1126/sciadv.1501532)) for PaeloCAR. For this study, only dates with a reliable or cutting or near cutting date were used, limiting the sample to 7,449 tree ring dates.
 
 ### 7.1 Import data
 
@@ -1363,14 +1369,20 @@ dendro_dates <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSI
   subset(.,Outer_Symbol == "V"|Outer_Symbol=="RLB"|Outer_Symbol=="R"|Outer_Symbol=="+B"|Outer_Symbol=="++G"|Outer_Symbol=="RG"|Outer_Symbol=="+V"|Outer_Symbol=="L"|Outer_Symbol=="+RLB"|Outer_Symbol=="CB"|Outer_Symbol=="+L"|Outer_Symbol=="+LB"|Outer_Symbol=="LGB"|Outer_Symbol=="C"|Outer_Symbol=="CL"|Outer_Symbol=="+R"|Outer_Symbol=="+CL"|Outer_Symbol=="CGB"|Outer_Symbol=="RLG"|Outer_Symbol=="GB"|Outer_Symbol=="VL"|Outer_Symbol=="GLB"|Outer_Symbol=="+GLB"|Outer_Symbol=="BB"|Outer_Symbol=="+LG"|Outer_Symbol=="+RGB"|Outer_Symbol=="CLB"|Outer_Symbol=="c"|Outer_Symbol=="r"|Outer_Symbol=="cB"|Outer_Symbol=="+r"|Outer_Symbol=="rB"|Outer_Symbol=="+VL"|Outer_Symbol=="CG"|Outer_Symbol=="+CG"|Outer_Symbol=="RC"|Outer_Symbol=="LB "|Outer_Symbol=="rGB"|Outer_Symbol== "RB COM"|Outer_Symbol== "R COMP"|Outer_Symbol== "R INC")%>%
   subset(.,!is.na(Site_Number))%>%
   mutate(ID=1:nrow(.))
+```
+
+### 7.2 Synthesize Climate Data
+
+Unique site locations were identified and climate conditions at each unique site location were calculated following the same steps as above (Step 4).
+
+```{r}
+#| echo: false
 
 duplicates <- st_coordinates(dendro_dates)%>%
   duplicated()
 
 dendro_dates_unique_loc <- dendro_dates[!duplicates,]
 ```
-
-### 7.2 Synthesize Climate Data
 
 ```{r}
 #| echo: false
@@ -1452,6 +1464,8 @@ write.csv(summary_all_dendro,"./OUTPUT/climatevariability_dendro.csv",row.names=
 
 ### 7.3 Synthesize occupation timeline
 
+For this analysis, tree ring dates with a cutting event in each year were summed. Fifteen years were missing any tree ring dates. For this time series to be easily subjected to a Granger causality test, the number of tree ring dates in missing years were linearly interpolated from the number of samples for the year before and the year after.
+
 ```{r}
 #| echo: false
 dendro_df <-  st_drop_geometry(dendro_dates)%>%
@@ -1472,7 +1486,7 @@ write.csv(dendro_df,"./OUTPUT/dendro_activity_timeseries.csv")
 
 ### 7.4 Combine Climate and Occupation
 
-Used min and max because we want to find the values that are characteristic of the respective percentile limit.
+The number of samples for many years only include tree rings from 1-2 sites. Therefore, the mean for each climate measure in each year was calculated (rather than a percentile cut off of, say, ≤ P~1~ ).
 
 ```{r}
 #| echo: false
@@ -1513,7 +1527,11 @@ merge(.,dendro_change_std,by=c("year"))%>%
 merge(.,dendro_z,by=c("year"))
 ```
 
-Augmented Dickey-Fuller tests
+### 7.5 Granger Causality Test
+
+Granger causality tests are conducted to compare the predictability between all five climate measures and future instances of building activity. First, the complete tree ring and climate time series were submitted to an Augmented Dickey-Fuller test, because Granger causality tests are intended for stationary series. Each time series was shown to be stationary. NOTE: Because these series are several hundred years long, they are very likely to be stationary; however, this might mean key instances of change where patterns skew rapidly, are under appreciated.
+
+#### 7.5.1 Augmented Dickey-Fuller tests
 
 ```{r}
 # p < 0.05 = stationary so good for granger causality
@@ -1524,6 +1542,10 @@ adf.test(dendro_combined_timeseries[,7])
 adf.test(dendro_combined_timeseries[,8])
 adf.test(dendro_combined_timeseries[,9])
 ```
+
+#### 7.5.2 Loop of Granger Causality tests
+
+This loop compares each climate measure against a 1-25 year lag in tree-ring building activity. Granger causality p-values are recorded for each test and recorded in the object `gc_results`.
 
 ```{r}
 #| echo: false
@@ -1546,6 +1568,8 @@ for(i in c("mean_precipitation","spatial_variability","temporal_variability","sp
   }
 }
 ```
+
+Plot the results.
 
 ```{r}
 #| echo: false
@@ -1666,16 +1690,17 @@ ggarrange(p1,p2,p3,p4,p5,p6,p7,
 dev.off()
 ```
 
-## SUPPLEMENTALS
+## A. Supplemental Figures
+
+Below is a supplemental GIF of all climate variability measures plotted for the study period 600-1350.
 
 ```{r}
 #| echo: false  
 
-r_var1 <- r_var[[600:1300]]  
-
-df <- as.data.frame(r_var1,xy=T)%>%
+df <- as.data.frame(r_var,xy=T)%>%
   pivot_longer(cols = -c(x, y), names_to = "layer",values_to = "value")%>%
   mutate(layer_num = as.numeric(gsub("PPT_", "", layer)))  
+
 p <- ggplot() +   
   geom_raster(data=df, aes(x = x, y = y, fill = value)) +   
   scale_fill_gradientn(colors=c("#bb3e03","#ca6702","#ee9b00","#ffe6a750","#94d2bd","#0a9396","#005f73"), rescaler = ~ scales::rescale_mid(.x, mid = 0), name = "Precipitation  Variability (mm)")+   
@@ -1689,7 +1714,5 @@ p <- ggplot() +
   ease_aes("linear")+   
   theme_minimal()  
 
-animate(p, fps = 5,nframes = 701, width = 750, height = 600)  anim_save("./FIGURES/raster_precip_variability_600to1300.gif")  
+animate(p, fps = 5,nframes = 701, width = 750, height = 600)  anim_save("./FIGURES/raster_precip_variability_600to1350.gif")  
 ```
-
-## 
