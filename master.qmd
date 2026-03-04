@@ -10,8 +10,6 @@ This R-based research compendium supports the analyses from *Absolute Precipitat
 
 View the raw source code and output at: provide link
 
-# hey i can't do this thing...
-
 **When using the code included in this research compendium, please cite *all* of the following:**
 
 > Field, S and M. DePlata-Peterson. 2026. *Variability as a Driver of Re-settlement in the northern US Southwest*. Journal of Archaeological Science, In Prep.
