@@ -10,8 +10,6 @@ This R-based research compendium supports the analyses from *Absolute Precipitat
 
 View the raw source code and output at: provide link
 
-# hey i can't do this thing...
-
 **When using the code included in this research compendium, please cite *all* of the following:**
 
 > Field, S and M. DePlata-Peterson. 2026. *Variability as a Driver of Re-settlement in the northern US Southwest*. Journal of Archaeological Science, In Prep.
@@ -22,7 +20,7 @@ View the raw source code and output at: provide link
 
 ```{r setup, include=FALSE}
 #| echo: false
-knitr::opts_knit$set(root.dir = "C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/PROJECT/CLIMATE_VARIABILITY_REDUX")
+knitr::opts_knit$set(root.dir = "C:/Users/mdeplata/OneDrive - University of Wyoming/Sean Field's files - FIELD LAB HOME/PROJECT/CLIMATE_VARIABILITY_REDUX")
 ```
 
 ```{r}
@@ -46,7 +44,7 @@ theme_set(theme_bw())
 study_extent <- st_read("./DATA/study_extent.shp")%>%
   st_transform(.,crs=4326)
 
-four_corners <- st_read("C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/DATA_GENERAL/SPATIAL/NORTH_AMERICA_REGIONS/SOUTHWEST/STATE_BOUNDARIES/four_corners_states.shp")%>%
+four_corners <- st_read("C:/Users/mdeplata/OneDrive - University of Wyoming/Sean Field's files - FIELD LAB HOME/DATA_GENERAL/SPATIAL/NORTH_AMERICA_REGIONS/SOUTHWEST/STATE_BOUNDARIES/four_corners_states.shp")%>%
   st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
 ```
@@ -116,11 +114,11 @@ The geodatabase `chaco_greathouses` and the attributes from `outlier_database` a
 
 ```{r}
 #| echo: false
-chaco_greathouses <- st_read("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/VanDykeEtAl2015_WGS84.shp")%>%
+chaco_greathouses <- st_read("E:/SENSITIVE SITE DATA/VanDykeEtAl2015_WGS84.shp")%>%
   st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
 
-outlier_database <-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/OutlierAttributes_Public_CRA.csv")%>%
+outlier_database <-read.csv("E:/SENSITIVE SITE DATA/OutlierAttributes_Public_CRA.csv")%>%
   select("Site.name","Site.number.","Est..great.house.start.date.","Est..great.house.end.date.")%>%
   setNames(c("SITE_NA","SITE_NUMBE","BEGIN_DATE","END_DATE"))
 
@@ -149,7 +147,7 @@ To aid in later stages creating a complete occupation time series for all sites 
 
 ```{r}
 #| echo: false
-vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/db_vepii_n.csv")%>%
+vepii_sites<-read.csv("E:/SENSITIVE SITE DATA/db_vepii_n.csv")%>%
   subset(tlkp.Site.Function_DescGen=="Habitation")%>%
   subset(N.roomblocks >= 1)%>%
   subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
@@ -160,6 +158,7 @@ vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIV
   mutate(UNIQ_ID = 1:nrow(.))
 
 vep_dates <- read.csv("./DATA/VEP_dates.csv")
+
 ```
 
 ## 4.0 Calculate Climate Conditions
