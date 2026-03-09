@@ -1366,7 +1366,7 @@ These data include 32,863 tree ring dates from archaeological sites in New Mexic
 
 ```{r}
 #| echo: false
-dendro_dates <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
+dendro_dates <- read.csv("E:/SENSITIVE SITE DATA/BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
   st_as_sf(.,coords=c("LON","LAT"),crs=4326)%>%
   st_intersection(.,study_extent)%>%
   subset(.,Outer_Symbol == "V"|Outer_Symbol=="RLB"|Outer_Symbol=="R"|Outer_Symbol=="+B"|Outer_Symbol=="++G"|Outer_Symbol=="RG"|Outer_Symbol=="+V"|Outer_Symbol=="L"|Outer_Symbol=="+RLB"|Outer_Symbol=="CB"|Outer_Symbol=="+L"|Outer_Symbol=="+LB"|Outer_Symbol=="LGB"|Outer_Symbol=="C"|Outer_Symbol=="CL"|Outer_Symbol=="+R"|Outer_Symbol=="+CL"|Outer_Symbol=="CGB"|Outer_Symbol=="RLG"|Outer_Symbol=="GB"|Outer_Symbol=="VL"|Outer_Symbol=="GLB"|Outer_Symbol=="+GLB"|Outer_Symbol=="BB"|Outer_Symbol=="+LG"|Outer_Symbol=="+RGB"|Outer_Symbol=="CLB"|Outer_Symbol=="c"|Outer_Symbol=="r"|Outer_Symbol=="cB"|Outer_Symbol=="+r"|Outer_Symbol=="rB"|Outer_Symbol=="+VL"|Outer_Symbol=="CG"|Outer_Symbol=="+CG"|Outer_Symbol=="RC"|Outer_Symbol=="LB "|Outer_Symbol=="rGB"|Outer_Symbol== "RB COM"|Outer_Symbol== "R COMP"|Outer_Symbol== "R INC")%>%
