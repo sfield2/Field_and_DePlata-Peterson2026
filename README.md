@@ -19,8 +19,8 @@ Field_and_DePlataPeterson_2026.qmd performs the following steps:
 
 # Directory Strucutre
 1. `FieldandDean2026.qmd`: `R` and `Python` scripts to conduct analyses
-2. DATA/: Directory containing data used in study. NOTE: Non-publicly accessible data is not included.
-4. FIGURES/: Directory containing low resolution figures used in the manuscript.
+2. Data/: Directory containing data used in study. NOTE: Non-publicly accessible data is not included.
+4. Figures/: Directory containing low resolution figures used in the manuscript.
 6. README.Rmd: This `README` file
 
 # Citation
