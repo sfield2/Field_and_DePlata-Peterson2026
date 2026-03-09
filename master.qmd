@@ -6,8 +6,6 @@ editor: visual
 
 # Research compendium for Field and DePlata-Peterson (2026)
 
-Updated..
-
 This R-based research compendium supports the analyses from *Absolute Precipitation as a Driver of Re-settlement in the northern US Southwest*, which shows that that local measures of absolute and directional change in precipitation are strongly correlated with settlement histories; however, absolute precipitation change is the most closely linked as an explanatory driver of near-term future construction activity.
 
 View the raw source code and output at: provide link
