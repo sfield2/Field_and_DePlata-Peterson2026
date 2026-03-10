@@ -105,20 +105,20 @@ writeRaster(r_var,"./DATA/CLIMATE/PPT_annualvariability_600_1351.tif")
 
 Settlement data of Chaco Great House communities comes from two sources:
 
-1.  `chaco_greathouses`: This is the *Greater Chaco Landscapes Great House Communities Integration Dataset*. **Note:** A version of these data were published by Van Dyke et al. (2016, [DOI](https://doi.org/10.7183/0002-7316.81.2.205)), with access requested [here](https://doi.org/10.6067/XCV8BV7JJ4). The database contains 365 sites, including:
+1.  `chaco_greathouses`: This is the *Greater Chaco Landscapes Great House Communities Integration Dataset*. **Note:** A version of these data were published by Van Dyke et al. (2016, [DOI](https://doi.org/10.7183/0002-7316.81.2.205)). Access to this data can be requested [here](https://doi.org/10.6067/XCV8BV7JJ4). The database contains 365 sites, including:
     1.  15 great houses in the Chaco Core, 243 great house outliers, 11 herraduras, 46 shrines, 21 stone circles, 9 crescents, and 20 important landforms.
     2.  The full citation for the database is: Heitman, Carrie C., Ruth Van Dyke, Matthew Peebles, and Kyle Boczinsky. 2016. Greater Chaco Landscapes Great House Communities GIS Integration Dataset. GIS dataset submitted to the National Park Service in partial fulfillment of Rocky Mountain Cooperative Ecosystems Study Unit Task Agreement Number: P14AC01703, Project #: UCOB-109.
-2.  `outlier_database`: This is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive. Access [here](https://www.chacoarchive.org/cra/outlier-database/).
+2.  `outlier_database`: This is the Chacoan Outlier database, synthesized by Kantner et al. at the "Chaco World Conference" in 1999. The database was maintained by Kantner (2001-2007), receiving contributions from Paul Reed, R.G. Matson, Bill Lipe, Mark Varien, Scott Ortman, and Susan Ryan. The non-spatial data attributes are publicly accessible at the Chaco Research Archive, and can be accessed [here](https://www.chacoarchive.org/cra/outlier-database/).
 
 The geodatabase `chaco_greathouses` and the attributes from `outlier_database` are merged to reconstruct occupation at 105 Chaco great house outliers. These data are stored under as the object `gh`.
 
 ```{r}
 #| echo: false
-chaco_greathouses <- st_read("E:/SENSITIVE SITE DATA/VanDykeEtAl2015_WGS84.shp")%>%
+chaco_greathouses <- st_read("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/VanDykeEtAl2015_WGS84.shp")%>%
   st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
 
-outlier_database <-read.csv("E:/SENSITIVE SITE DATA/OutlierAttributes_Public_CRA.csv")%>%
+outlier_database <-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/SENSITIVE SITE LOCATIONS/OutlierAttributes_Public_CRA.csv")%>%
   select("Site.name","Site.number.","Est..great.house.start.date.","Est..great.house.end.date.")%>%
   setNames(c("SITE_NA","SITE_NUMBE","BEGIN_DATE","END_DATE"))
 
@@ -139,15 +139,14 @@ rm(chaco_greathouses,outlier_database)
 
 ### 3.2 VEP II North Study Area Site Data
 
-Settlement data from the Village Ecodynamics Project (VEP) II north study area come from Schwindt et al. (2016: [DOI](http://doi.org/10.7183/0002-7316.81.1.74)), which includes additions to an earlier (VEP I) database (Ortman et al. 2007: [DOI](https://doi.org/10.2307/40035813)). The database used in this study is a limited version of the VEP II north database, which before filtering and subsetting contains 9286 site records. The data was subset to include only record site types with characteristics common to residential sites.
+Settlement data from the Village Ecodynamics Project (VEP) II north study area come from Schwindt et al. (2016: [DOI](http://doi.org/10.7183/0002-7316.81.1.74)), which includes additions to an earlier (VEP I) database (Ortman et al. 2007: [DOI](https://doi.org/10.2307/40035813)).
 
-To aid in later stages creating a complete occupation time series for all sites in the VEP database (see section 5.1.2), the date ranges for each occupational phase are imported.
-
-`vep_dates` can be accessed directly at: **INSERT GITHUB LINK**
+1.  `vepii_sites`: The database used in this study is a limited version of the VEP II north database, which before filtering and subsetting contains 9286 site records. The data was subset to include only record site types with characteristics common to residential sites.
+2.  `vep_dates`:To aid in later stages creating a complete occupation time series for all sites in the VEP database (see section 5.1.2), the date ranges for each occupational phase are imported. These date ranges can be accessed [here](https://github.com/sfield2/Field_and_DePlata-Peterson2026/tree/main/Data) or imported following the code below.
 
 ```{r}
 #| echo: false
-vepii_sites<-read.csv("E:/SENSITIVE SITE DATA/db_vepii_n.csv")%>%
+vepii_sites<-read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/SENSITIVE SITE LOCATIONSdb_vepii_n.csv")%>%
   subset(tlkp.Site.Function_DescGen=="Habitation")%>%
   subset(N.roomblocks >= 1)%>%
   subset(recordtypedesc=="Habitation" | recordtypedesc == "Great House"| recordtypedesc=="Oversized pitstructure" | recordtypedesc == "Great Kiva"| recordtypedesc=="Multi-wall Structure" | recordtypedesc == "Tower-Kiva") %>%
@@ -157,8 +156,7 @@ vepii_sites<-read.csv("E:/SENSITIVE SITE DATA/db_vepii_n.csv")%>%
   st_intersection(.,study_extent)%>%
   mutate(UNIQ_ID = 1:nrow(.))
 
-vep_dates <- read.csv("./DATA/VEP_dates.csv")
-
+vep_dates <- read.csv("https://raw.githubusercontent.com/sfield2/Field_and_DePlata-Peterson2026/refs/heads/main/Data/VEP_dates.csv")
 ```
 
 ## 4.0 Calculate Climate Conditions
@@ -1354,7 +1352,7 @@ write.csv(z_df,"./OUTPUT/precip_5yrzscore_cor.csv",row.names=F)
 
 ## 7.0 Analyze Dendrochronological Data
 
-Dendrochronological data was accessed from the Digital Archaeological Record (tDAR):
+Dendrochronological data was accessed from the Digital Archaeological Record (tDAR) and can be accessed [here](https://doi.org/10.6067/XCV82J6D7B):
 
 1.  Compiled Tree-ring Dates from the Southwestern United States (Restricted). Timothy A. Kohler, R. Kyle Bocinsky. Science Advances. 2016 ( tDAR id: 399314) ; [doi:10.6067/XCV82J6D7B](https://doi.org/10.6067/XCV82J6D7B)
 
@@ -1364,7 +1362,7 @@ These data include 32,863 tree ring dates from archaeological sites in New Mexic
 
 ```{r}
 #| echo: false
-dendro_dates <- read.csv("E:/SENSITIVE SITE DATA/BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
+dendro_dates <- read.csv("C:/Users/sfield3/Documents/RESEARCH/DATA GENERAL/SENSITIVE SITE LOCATIONS/SENSITIVE SITE LOCATIONS/BOCINSKY_ET_AL_2015_TREE_RINGS.csv")%>%
   st_as_sf(.,coords=c("LON","LAT"),crs=4326)%>%
   st_intersection(.,study_extent)%>%
   subset(.,Outer_Symbol == "V"|Outer_Symbol=="RLB"|Outer_Symbol=="R"|Outer_Symbol=="+B"|Outer_Symbol=="++G"|Outer_Symbol=="RG"|Outer_Symbol=="+V"|Outer_Symbol=="L"|Outer_Symbol=="+RLB"|Outer_Symbol=="CB"|Outer_Symbol=="+L"|Outer_Symbol=="+LB"|Outer_Symbol=="LGB"|Outer_Symbol=="C"|Outer_Symbol=="CL"|Outer_Symbol=="+R"|Outer_Symbol=="+CL"|Outer_Symbol=="CGB"|Outer_Symbol=="RLG"|Outer_Symbol=="GB"|Outer_Symbol=="VL"|Outer_Symbol=="GLB"|Outer_Symbol=="+GLB"|Outer_Symbol=="BB"|Outer_Symbol=="+LG"|Outer_Symbol=="+RGB"|Outer_Symbol=="CLB"|Outer_Symbol=="c"|Outer_Symbol=="r"|Outer_Symbol=="cB"|Outer_Symbol=="+r"|Outer_Symbol=="rB"|Outer_Symbol=="+VL"|Outer_Symbol=="CG"|Outer_Symbol=="+CG"|Outer_Symbol=="RC"|Outer_Symbol=="LB "|Outer_Symbol=="rGB"|Outer_Symbol== "RB COM"|Outer_Symbol== "R COMP"|Outer_Symbol== "R INC")%>%
