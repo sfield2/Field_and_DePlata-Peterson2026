@@ -20,7 +20,7 @@ View the raw source code and output at: provide link
 
 ```{r setup, include=FALSE}
 #| echo: false
-knitr::opts_knit$set(root.dir = "C:/Users/mdeplata/OneDrive - University of Wyoming/Sean Field's files - FIELD LAB HOME/PROJECT/CLIMATE_VARIABILITY_REDUX")
+knitr::opts_knit$set(root.dir = "C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/PROJECT/CLIMATE_VARIABILITY_REDUX")
 ```
 
 ```{r}
@@ -35,16 +35,16 @@ theme_set(theme_bw())
 
 ## 2.0 Import Study Area Extent and Paleoclimate Raster
 
-`study_area`: The study area is derived as the latitude and longitude of extent of sites used in the study (see Section 3.0). This extent can be downloaded as a shapefile at: **INSERT GITHUB LINK**
+`study_area`: The study area is derived as the latitude and longitude of extent of sites used in the study (see Section 3.0). This extent can be downloaded as a shapefile [here](https://github.com/sfield2/Field_and_DePlata-Peterson2026/tree/main/Data).
 
-`four_corners`: Shapefiles for the four corners states are used for plotting of supplemental figures later on.
+`four_corners`: Shapefiles for the four corners states are used for plotting of supplemental figures later on. These data can be downloaded from the US Census [here.](https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html)
 
 ```{r}
 #| echo: false
 study_extent <- st_read("./DATA/study_extent.shp")%>%
   st_transform(.,crs=4326)
 
-four_corners <- st_read("C:/Users/mdeplata/OneDrive - University of Wyoming/Sean Field's files - FIELD LAB HOME/DATA_GENERAL/SPATIAL/NORTH_AMERICA_REGIONS/SOUTHWEST/STATE_BOUNDARIES/four_corners_states.shp")%>%
+four_corners <- st_read("C:/Users/sfield3/OneDrive - University of Wyoming/FIELD LAB HOME/DATA_GENERAL/SPATIAL/NORTH_AMERICA_REGIONS/SOUTHWEST/STATE_BOUNDARIES/four_corners_states.shp")%>%
   st_transform(.,crs=4326)%>%
   st_intersection(.,study_extent)
 ```
