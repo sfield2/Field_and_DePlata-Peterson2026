@@ -18,7 +18,7 @@ Field_and_DePlataPeterson_2026.qmd performs the following steps:
 7. Import Dendrochronological Data (NOTE: this data is not publicly accessible, but can be retrieved from sources cited in the markdown document) and compare to Paleocliamte
 
 # Directory Strucutre
-1. `FieldandDean2026.qmd`: `R` and `Python` scripts to conduct analyses
+1. `FieldandDean2026.qmd`: `R` scripts to conduct analyses
 2. Data/: Directory containing data used in study. NOTE: Non-publicly accessible data is not included.
 4. Figures/: Directory containing low resolution figures used in the manuscript.
 6. README.Rmd: This `README` file
